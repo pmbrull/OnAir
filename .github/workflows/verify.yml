@@ -1,0 +1,91 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Documentation integrity needs no toolchain, so it runs on a free Linux runner and gives the
+  # fastest possible signal on the mistake that is easiest to make and hardest to spot later.
+  docs:
+    name: docs and invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ADR/GAP references resolve and records are indexed
+        run: ./scripts/check-references.sh
+      - name: ARCHITECTURE invariants
+        run: ./scripts/check-architecture.sh
+
+  build:
+    name: build and test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `xcode-select` to a version-stamped path: the runner image names Xcode by point release,
+      # so pinning one breaks on the next image bump. Assert the toolchain instead of assuming it,
+      # so a runner regression fails here with a clear message rather than inside the build.
+      - name: Check the toolchain is Swift 6+
+        run: |
+          swift --version
+          major=$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9]*\).*/\1/p' | head -1)
+          if [ -z "$major" ] || [ "$major" -lt 6 ]; then
+            echo "::error title=Toolchain::Swift 6+ required; runner has $(swift --version | head -1)"
+            exit 1
+          fi
+
+      # The local gate skips these when they are absent, so CI is the only place the formatting
+      # and lint rules are guaranteed to actually run.
+      - name: Install swiftformat and swiftlint
+        run: brew install swiftformat swiftlint
+
+      - name: Format check
+        run: swiftformat Sources Tests Package.swift --lint
+
+      - name: Lint
+        run: swiftlint lint --quiet --strict
+
+      # Plain `swift build`, not `--build-tests`: the test target needs the search-path flags that
+      # `make test` computes, and building it twice with different flags only fills the cache.
+      - name: Build
+        run: swift build
+
+      # `make test` rather than `swift test`: the target detects whether XCTest is available and
+      # adds the Swift Testing search paths only when it is not, so the same command works on a
+      # runner with Xcode and on a laptop with only the Command Line Tools.
+      - name: Test
+        run: make test
+
+      # DeviceKitTests skip without capture hardware and a CI runner has none, so a green run here
+      # does NOT mean they executed. Say so out loud rather than letting a green check imply
+      # coverage it does not have.
+      - name: Note journey-test coverage
+        if: always()
+        run: |
+          echo "::notice title=Journey tests::DeviceKitTests skip on CI (no capture devices)."
+          echo "They are verified locally before a PR opens — see docs/agent-workflow.md."
+
+      - name: Assemble the app bundle
+        run: make app
+
+      - name: Check the bundle
+        run: |
+          plutil -lint .build/OnAir.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :LSUIElement" .build/OnAir.app/Contents/Info.plist
+          # A5 in the shipped artefact, not just in the sources: a usage-description key would mean
+          # something started capturing.
+          if /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" \
+               .build/OnAir.app/Contents/Info.plist >/dev/null 2>&1; then
+            echo "::error title=A5::NSCameraUsageDescription is present; OnAir must never capture."
+            exit 1
+          fi
