@@ -1,0 +1,13 @@
+--swiftversion 6.0
+--indent 4
+--maxwidth 100
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+# Trailing commas in multi-line literals keep a diff to one line when an element is appended.
+# This must agree with `.swiftlint.yml`, which disables `trailing_comma` for the same reason —
+# a formatter that strips them and a linter that wants them is an infinite loop at commit time.
+--commas always
+--trimwhitespace always
+--exclude .build

@@ -1,0 +1,65 @@
+# Install with `make hooks`.
+#
+# Split by cost. Everything here runs on every commit and must stay fast — the doc-integrity and
+# architecture checks are greps, and the formatters only see staged files. `swift test` is
+# deliberately NOT here: a cold run is slow enough that the hook gets `--no-verify`d, which costs
+# more than it saves. CI runs it (`.github/workflows/verify.yml`).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$        # trailing spaces are a hard line break in Markdown
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-executables-have-shebangs
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      # A token committed to git is a token to revoke, and history keeps it.
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      # Cheapest and highest-value: a dangling ADR/GAP reference, or a record that closed without a
+      # decision, is invisible in review and permanent once it ships.
+      - id: references
+        name: ADR/GAP references resolve and records are indexed
+        entry: ./scripts/check-references.sh
+        language: system
+        pass_filenames: false
+        files: ^(docs/|Sources/|Tests/|scripts/|.*\.md$)
+
+      # Invariants A1/A2/A4/A5 — in particular A4 (the token never leaves the Keychain) and A5
+      # (nothing ever opens a capture stream), which are the two properties this app is sold on.
+      - id: architecture
+        name: ARCHITECTURE invariants (headless kits, token in Keychain, no capture)
+        entry: ./scripts/check-architecture.sh
+        language: system
+        pass_filenames: false
+        files: ^(Sources/|Resources/)
+
+      - id: swiftformat
+        name: swiftformat
+        entry: swiftformat
+        language: system
+        types: [swift]
+        require_serial: true
+
+      - id: swiftlint
+        name: swiftlint
+        entry: swiftlint lint --quiet --strict
+        language: system
+        types: [swift]
+        require_serial: true
+
+      # Compiling is fast enough incrementally to be worth catching before the commit lands;
+      # the test suite is not, and lives in CI.
+      - id: swift-build
+        name: swift build
+        entry: swift build
+        language: system
+        pass_filenames: false
+        files: ^(Sources/|Package\.swift$)
