@@ -14,7 +14,14 @@ struct StatusEngineTests {
     private let onCamera = UserStatus(emoji: ":movie_camera:", text: "On camera")
     private let standup = UserStatus(emoji: ":coffee:", text: "Standup")
     /// What Slack holds before OnAir writes: the status, plus the expiry only Slack knows about.
-    private let standupLive = LiveStatus(status: UserStatus(emoji: ":coffee:", text: "Standup"))
+    ///
+    /// Deliberately carries a non-zero expiry. With `0` here, a regression that re-stashed
+    /// `LiveStatus(status: previous.status)` on a refresh — dropping the clock and reintroducing
+    /// the ADR-0015 bug on that path alone — would satisfy every assertion in this suite.
+    private let standupLive = LiveStatus(
+        status: UserStatus(emoji: ":coffee:", text: "Standup"),
+        expiresAt: 1_700_009_999
+    )
 
     private func policy(
         onDelay: TimeInterval = 3,

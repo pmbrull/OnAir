@@ -11,8 +11,12 @@ third-party tool like Google Calendar, then *in a meeting* is never re-resolved.
 
 It is not re-resolved because nothing is coming to re-resolve it. Google Calendar's Slack app does
 not clear your status at the end of the event — it writes the status **with `status_expiration` set
-to the event's end time** and lets Slack clear it. That is the entire mechanism, and it is
-one-shot.
+to the event's end time** and lets Slack clear it. That is the entire mechanism, and it is one-shot.
+
+That mechanism is **inference, not measurement**: the symptom is a user report, and the rest is read
+off Slack's API. GAP-0001 carries the question and names the one-line way to answer it. The decision
+below does not depend on it — dropping an expiry that Slack has told us about is wrong whoever set
+it — but the story in this Context would change if the inference is wrong.
 
 OnAir read that status as `(emoji, text)` and dropped the expiry on the floor. Then
 `SlackWire.profileSetBody` sent `status_expiration: 0` on *every* write, restores included. So what
@@ -39,6 +43,14 @@ ADR-0009 chose `status_expiration: 0` deliberately and that reasoning still hold
     always going to;
   - expiry already passed → **clear instead**. Slack would have cleared that status during the
     call, so putting the words back would hand the user a status they had already stopped having.
+    "Passed" carries a ten-second horizon, because the decision and the write are a network round
+    trip apart and an expiry two seconds out would otherwise reach Slack already in the past — the
+    one input Slack's documented behaviour is silent about.
+- `LiveStatus.effectiveStatus(now:)` is the same predicate on the way *in*: the override rule
+  (ADR-0008) sees an expired status as cleared. Without it the two halves contradict each other —
+  the restore treats a passed expiry as gone while the override rule treats it as a status to
+  protect, and OnAir would then write nothing for a whole call because of a status Slack has
+  already retired.
 - OnAir's own status is still written with `status_expiration: 0`. `profileSetBody`'s parameter
   defaults to `0`, and the restore is the only caller that passes anything else.
 - `stillOwns` compares the expiry too. OnAir writes `0`, so an expiry that has appeared under the
@@ -52,6 +64,11 @@ ADR-0009 chose `status_expiration: 0` deliberately and that reasoning still hold
   instead of putting it back.*
 - **OnAir now writes a non-zero `status_expiration`** — once, on a restore, and only ever the value
   it read. It never chooses one, so ADR-0009's "no expiry as a crash net" is intact.
+- **Every path that puts a status back now checks ownership first.** `disconnect()` did not, and a
+  blind write there stopped being merely wrong the moment a passed expiry could make it a *clear*:
+  deleting a status the user typed rather than replacing it. Quit, restore and disconnect now make
+  the same ADR-0008 check, and a read that fails counts as "not ours" — the stranded status ADR-0009
+  already accepts is the cheaper of the two mistakes.
 - **A profile without `status_expiration` breaks reading the status** instead of degrading. Its
   presence is documentation-derived (GAP-0001); `make doctor-slack` prints the field, so the live
   check that closes that gap now covers this too.

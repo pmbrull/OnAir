@@ -12,7 +12,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-SOURCE="https://raw.githubusercontent.com/github/gemoji/master/db/emoji.json"
+# Pinned to a tag, not to `master`: the output of this script is compiled into a process that holds
+# a Slack user token, so "whatever upstream contained today" is not an acceptable trust anchor.
+# Bump the tag deliberately, re-run, and read the diff.
+SOURCE="https://raw.githubusercontent.com/github/gemoji/v4.1.0/db/emoji.json"
 OUT="Sources/StatusKit/EmojiTable.swift"
 
 scratch=$(mktemp)
@@ -22,23 +25,48 @@ echo "fetching $SOURCE"
 curl -fsSL --max-time 60 "$SOURCE" -o "$scratch"
 
 python3 - "$scratch" "$OUT" "$SOURCE" <<'PY'
-import json, sys
+import json, re, sys
 
 raw, out, source = sys.argv[1], sys.argv[2], sys.argv[3]
+
+# Everything below goes verbatim into a Swift `"""` literal, and Swift interpolates `\(...)` inside
+# one. An upstream alias of `\(anything())` would therefore become *code* in a process holding a
+# Slack token — so the shapes are enforced here, before compilation, and a violation aborts the
+# generation rather than being skipped. The suite re-checks the same two shapes afterwards, but by
+# then any payload has already compiled.
+ALIAS = re.compile(r"\A[a-z0-9_+-]+\Z")
+
+
+def refuse(reason):
+    raise SystemExit(f"refusing to generate: {reason}")
+
 
 pairs, seen = [], set()
 for entry in json.load(open(raw, encoding="utf-8")):
     glyph = entry.get("emoji")
-    if not glyph or any(c.isspace() for c in glyph):
-        # The packed format separates pairs by whitespace, so a glyph containing any would make
-        # the table ambiguous. None do today; skipping loudly beats emitting something unparseable.
-        print(f"skipped {entry.get('aliases')}: glyph contains whitespace", file=sys.stderr)
+    aliases = entry.get("aliases", [])
+    if not glyph:
+        print(f"skipped {aliases}: no glyph", file=sys.stderr)
         continue
-    for alias in entry.get("aliases", []):
-        if alias in seen or any(c.isspace() for c in alias):
+    if any(c.isspace() or c in '\\"' for c in glyph):
+        # Whitespace would make the packed format ambiguous. A backslash is how `\(interpolation)`
+        # would arrive and a quote is how the `\"\"\"` terminator would; neither belongs in an emoji.
+        refuse(f"glyph for {aliases} is not a bare emoji: {glyph!r}")
+    if all(ord(c) < 128 for c in glyph):
+        # Keycaps like #️⃣ legitimately start with an ASCII character, so the bar is "carries at
+        # least one non-ASCII scalar" — the same shape the suite asserts, which is what keeps a
+        # shifted pack detectable.
+        refuse(f"glyph for {aliases} carries no non-ASCII scalar: {glyph!r}")
+    for alias in aliases:
+        if not ALIAS.match(alias):
+            refuse(f"alias {alias!r} is not [a-z0-9_+-]+")
+        if alias in seen:
             continue
         seen.add(alias)
         pairs.append((alias, glyph))
+
+if not pairs:
+    refuse("no pairs survived; the source shape has changed")
 
 # Wrapped on UTF-16 units, which is what SwiftLint counts, and well under its 110 warning.
 INDENT, LIMIT = 4, 96

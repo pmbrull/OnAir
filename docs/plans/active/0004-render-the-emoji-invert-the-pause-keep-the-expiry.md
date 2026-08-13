@@ -105,3 +105,20 @@ no new scope, so nobody has to reconnect.
 - **Not done: exercising the built app.** `make app` assembles, but the installed OnAir was running
   and the camera was in use at the time, so launching a second instance would have raced the first
   one over a live Slack status. Left for the human to do off-camera.
+- **2026-08-13 — five reviewers ran on the diff; nine findings applied.** The two that mattered:
+  `disconnect()` restored without the ADR-0008 ownership check, which ADR-0015 upgraded from "wrong"
+  to "deletes a hand-typed status", and the generator wrote unvalidated upstream strings into a
+  Swift multiline literal, which interpolates — code in a process holding a Slack token. Also
+  applied: `effectiveStatus(now:)` so the override rule and the restore rule agree about an expired
+  status; a ten-second horizon so a slow round trip cannot produce a past expiry; a negative
+  `status_expiration` rejected rather than folded into "never"; `LiveStatus.hasExpired` shared with
+  `doctor` rather than re-derived there (A3); the expired-clear outcome reported on the disconnect
+  path too; `.display` in the history lines an emoji-only status would have left as empty quotes;
+  the glyph preview hidden from VoiceOver instead of claiming "not recognised" for an empty field;
+  and Settings warning when the shortcode has no colons, which the lenient lookup happily renders
+  and Slack silently ignores. The engine test stash now carries a non-zero expiry, so a refresh that
+  dropped the clock would fail rather than pass.
+- **2026-08-13 — the Google Calendar mechanism is inference, and now says so.** The symptom is a
+  user report; that the integration sets `status_expiration` and never returns is read off Slack's
+  API. Softened in ADR-0015, the fixture and the doc comments, and added to GAP-0001 with the
+  one-line way to settle it.

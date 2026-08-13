@@ -23,6 +23,20 @@ struct EmojiShortcodeTests {
         }
     }
 
+    /// The lookup is lenient about the colons so a Settings field can render mid-keystroke; Slack
+    /// is not, and it fails by silently keeping the old emoji. Something has to be able to tell
+    /// "renders fine" from "Slack will accept it" apart, or the preview becomes a false all-clear.
+    @Test("the wire shape is stricter than the lookup")
+    func wireShape() {
+        #expect(EmojiShortcode.glyph(for: "headphones") != nil)
+        #expect(!EmojiShortcode.isWireShaped("headphones"))
+        #expect(EmojiShortcode.isWireShaped(":headphones:"))
+        #expect(EmojiShortcode.isWireShaped(" :collate: "), "unknown but well-formed is still wire")
+        #expect(!EmojiShortcode.isWireShaped(":headphones"))
+        #expect(!EmojiShortcode.isWireShaped(""))
+        #expect(!EmojiShortcode.isWireShaped("::"), "the empty shortcode is not a shortcode")
+    }
+
     /// A workspace custom emoji lives in one Slack workspace and resolves nowhere else. `nil` is
     /// the honest answer; a stand-in glyph would be a plausible value filling an unknown
     /// (`no-silent-fallbacks.md`).
@@ -39,6 +53,8 @@ struct EmojiShortcodeTests {
     func packIsIntact() {
         let tokens = EmojiShortcode.packed.split(whereSeparator: \.isWhitespace)
         #expect(tokens.count.isMultiple(of: 2), "the pack is pairs; an odd count shifts them all")
+        // Against 3826 tokens as generated. Not a count assertion — the per-pair loop below is
+        // that — only a guard that the loop has something to iterate if generation half-failed.
         #expect(tokens.count > 3000, "the table looks truncated")
 
         for pair in stride(from: 0, to: tokens.count - 1, by: 2) {

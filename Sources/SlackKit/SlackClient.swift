@@ -1,7 +1,8 @@
 import Foundation
 import StatusKit
 
-/// The three Slack calls OnAir makes, and nothing else.
+/// The six Slack calls OnAir makes, and nothing else: the profile read and write, `auth.test`,
+/// and the three DND calls (ADR-0013).
 ///
 /// The client is handed a token and **never persists one** — storage is the app's `TokenStore`
 /// and the Keychain (invariant A4, ADR-0006). It is a value, so reconnecting means constructing a

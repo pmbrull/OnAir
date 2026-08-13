@@ -143,13 +143,20 @@ it was found by running `doctor`, not by reasoning about it.
 
 ## Known limitations
 
-- **A crash or a force-quit mid-call leaves your status set.** There is no server-side expiry, on
-  purpose — an expiring status is its own surprise when it vanishes mid-meeting
-  ([ADR-0009](docs/decisions/0009-restore-on-quit-is-the-only-safety-net.md)). Clear it in Slack.
+- **A crash or a force-quit mid-call leaves your status set.** OnAir never gives its own status a
+  server-side expiry, on purpose — an expiring status is its own surprise when it vanishes
+  mid-meeting ([ADR-0009](docs/decisions/0009-restore-on-quit-is-the-only-safety-net.md)). The only
+  expiry it ever writes is one it read off your previous status and put back
+  ([ADR-0015](docs/decisions/0015-carry-the-previous-status-expiry.md)). Clear it in Slack.
 - **One workspace.** Multiple accounts are not built.
 - **It cannot tell you which app is using the camera**, only that something is. Finding out would
   need exactly the privileges this app refuses.
 - **Screen sharing without a camera does not count.** Nothing detects it yet.
+- **Workspace custom emoji show as `:their_name:`, not a picture.** OnAir renders the standard set
+  from a vendored table; a custom emoji is data held inside one workspace, and resolving it would
+  cost a new Slack scope and a reconnect for every user
+  ([ADR-0014](docs/decisions/0014-render-shortcodes-from-a-vendored-table.md)). Slack itself still
+  shows it correctly — it is only OnAir's own menu that cannot.
 - **Slack's responses are not yet verified against a live workspace** — the parser's fixtures come
   from Slack's documentation ([GAP-0001](docs/gaps/open/0001-slack-fixtures-are-documented-not-captured.md)),
   and the PKCE exchange plus token longevity are documented-but-unmeasured
@@ -160,7 +167,7 @@ it was found by running `doctor`, not by reasoning about it.
 
 ```bash
 make verify   # references + architecture invariants + format + lint + build + test
-make test     # 106 tests in 12 suites — use this, not `swift test`
+make test     # 111 tests in 12 suites — use this, not `swift test`
 ```
 
 `swift test` will not work on a machine with only the Command Line Tools: XCTest ships with Xcode,
@@ -174,8 +181,10 @@ recording every load-bearing choice and the alternative it beat.
 ## TODO
 
 - [x] Register the shared OnAir Slack app (PKCE on) and fill `SlackOAuth.builtInClientID` (ADR-0012).
-- [ ] Run the connect flow against a live workspace and capture real Slack responses (GAP-0001,
-      GAP-0002 — including whether the token carries an expiry).
+- [x] Run the connect flow against a live workspace — `oauth.v2.access` accepted the PKCE exchange,
+      and `make doctor-slack` came back with a real profile (GAP-0002).
+- [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
+      carries an expiry (GAP-0001, GAP-0002).
 - [ ] Decide whether screen sharing is worth a third signal.
 - [ ] Multiple workspaces, if a second one ever gets daily use.
 - [ ] Revisit the crash net if a stranded status actually happens (ADR-0009).

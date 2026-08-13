@@ -87,6 +87,15 @@ struct SlackWireTests {
         }
     }
 
+    /// A nonsense value must not collapse into the permissive answer. "Never expires" is the
+    /// reading that writes a status back with nothing left to clear it (ADR-0015).
+    @Test("a negative status_expiration is malformed, not never")
+    func negativeExpirationThrows() {
+        #expect(throws: SlackError.malformedResponse("status_expiration is negative")) {
+            try SlackWire.status(SlackResponseFixtures.profileWithNegativeExpiration, status: 200)
+        }
+    }
+
     /// The load-bearing one. If missing keys read as "cleared", the override rule concludes there
     /// is nothing to protect and OnAir writes over a status it never actually saw.
     @Test("a profile missing the status keys throws rather than reading as cleared")

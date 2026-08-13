@@ -146,7 +146,7 @@ enum Doctor {
             )
             // The field ADR-0015 is about. A third-party status carries the clock that will clear
             // it, and printing it is how the next person sees that OnAir is carrying it too.
-            print("  \(pad("expires", 22))\(describe(expiry: live.expiresAt))")
+            print("  \(pad("expires", 22))\(describe(expiry: live))")
         } catch let error as SlackError {
             print("  \(error.summary)")
             if error.requiresReconnect {
@@ -171,10 +171,15 @@ enum Doctor {
         value ? "yes" : "no"
     }
 
-    private static func describe(expiry: Int) -> String {
-        guard expiry > 0 else { return "never (nothing will clear it but you or OnAir)" }
-        let at = Date(timeIntervalSince1970: TimeInterval(expiry))
+    /// Asks `LiveStatus` rather than comparing the timestamp here. Doctor's contract is "what the
+    /// engine would decide", so re-deriving the predicate would let this command disagree with the
+    /// app the moment the rule moves — in the one place people come to be told the truth (A3).
+    private static func describe(expiry live: LiveStatus) -> String {
+        guard live.expiresAt > 0 else { return "never (nothing will clear it but you or OnAir)" }
+        let at = Date(timeIntervalSince1970: TimeInterval(live.expiresAt))
         let when = at.formatted(date: .abbreviated, time: .shortened)
-        return at > Date() ? "\(when) — Slack will clear it then" : "\(when) — already passed"
+        return live.hasExpired(now: Date())
+            ? "\(when) — already passed; OnAir would clear rather than restore"
+            : "\(when) — Slack will clear it then"
     }
 }

@@ -74,6 +74,11 @@ public enum SlackWire {
         guard let expiration = profile["status_expiration"] as? Int else {
             throw SlackError.malformedResponse("profile has no status_expiration")
         }
+        // A negative expiry is not "never": folding it into `0` would be the permissive reading —
+        // the one that writes a status back with nothing left to clear it.
+        guard expiration >= 0 else {
+            throw SlackError.malformedResponse("status_expiration is negative")
+        }
         return LiveStatus(
             status: UserStatus(emoji: emoji, text: text),
             expiresAt: expiration
