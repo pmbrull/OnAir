@@ -37,9 +37,47 @@ Requires macOS 15+ and a Swift 6 toolchain. No dependencies to fetch — there a
 Then press **Connect to Slack** in Settings and approve in the browser — that is the whole setup.
 OnAir is a public client ([ADR-0012](docs/decisions/0012-a-public-client-pkce-and-no-secret-anywhere.md)):
 it ships only a Slack app *id* and proves each connection with PKCE, so **no secret exists in the
-binary, in your Keychain, or anywhere else**. Until the shared Slack app is registered, Settings
-shows a single Client ID field instead — [`docs/runbooks/first-run.md`](docs/runbooks/first-run.md)
-covers creating your own app for that case.
+binary, in your Keychain, or anywhere else**.
+
+### If Settings shows a "Client ID" field
+
+That build ships no Slack app id, so you bring your own — one minute with the manifest below.
+[**Click here to create it pre-filled**](https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Flocalhost%3A51234%2Fcallback%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D), or go to
+[api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**, pick
+your workspace, and paste:
+
+```json
+{
+    "display_information": {
+        "name": "OnAir",
+        "description": "Sets your Slack status when your camera turns on.",
+        "background_color": "#a01d21"
+    },
+    "oauth_config": {
+        "redirect_urls": [
+            "https://localhost:51234/callback"
+        ],
+        "scopes": {
+            "user": [
+                "users.profile:read",
+                "users.profile:write"
+            ]
+        },
+        "pkce_enabled": true
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+```
+
+The manifest sets the scopes, the redirect URL, and enables PKCE (which marks the app a public
+client — one-way, and exactly what OnAir needs). It also keeps token rotation **off**; leave it
+off, or every token would expire in hours and OnAir has no refresh loop (GAP-0002). After
+**Create**: **Basic Information → App Credentials** → copy the **Client ID** — only the id — into
+Settings, Save, Connect.
 
 ## What it does
 

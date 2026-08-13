@@ -88,3 +88,9 @@ doctor). Invariants: **A4** unchanged in force, narrowed in scope (one credentia
   (`Decodable` ignores unknown keys); `verifier` added to the A4 greps; a pasted override
   shadowing the built-in id is surfaced in Settings with a "Use built-in" way back; ADR-0012
   records the RFC 8252 residual risk.
+- 2026-08-13 — Ship the Slack app **manifest** (README + runbook + a pre-filled create link)
+  instead of five manual console steps — `oauth_config.pkce_enabled` turned out to be a manifest
+  field, so the whole bring-your-own-app path is one paste. `settings.token_rotation_enabled:
+  false` is set explicitly in it: rotation would expire every token in hours and OnAir has no
+  refresh loop (GAP-0002). `oauth_config.token_management_enabled` exists in the schema but its
+  semantics are undocumented — omitted rather than guessed.

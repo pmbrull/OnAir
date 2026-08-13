@@ -144,17 +144,17 @@ private struct SlackPane: View {
     }
 
     /// Only shown on a build with no baked-in app id — the audience is the person creating the
-    /// shared app (or their own), not every user. In the app rather than only in the README
-    /// because the redirect URL has to match to the character and here it can be copied.
+    /// shared app (or their own), not every user. The app manifest in the README does the whole
+    /// configuration in one paste; the redirect URL is repeated here because it is the one value
+    /// that must match to the character, and here it can be copied.
     private var setupSteps: some View {
         VStack(alignment: .leading, spacing: OnAirMetrics.gutter) {
-            step(1, "Create an app at api.slack.com/apps → From scratch, in your workspace.")
             step(
-                2,
-                "OAuth & Permissions → User Token Scopes: add users.profile:read and "
-                    + "users.profile:write."
+                1,
+                "api.slack.com/apps → Create New App → From a manifest → your workspace → paste "
+                    + "the manifest from OnAir's README. It sets the scopes, the redirect URL "
+                    + "below, PKCE (no secret is ever used), and keeps token rotation off."
             )
-            step(3, "OAuth & Permissions → Redirect URLs: add the URL below, then Save URLs.")
             HStack(spacing: OnAirMetrics.gutter) {
                 Text(redirectURI)
                     .font(OnAirFont.mono)
@@ -171,15 +171,9 @@ private struct SlackPane: View {
                 }
             }
             step(
-                4,
-                "OAuth & Permissions → enable PKCE. This marks the app a public client — "
-                    + "one-way, and exactly what OnAir needs: no client secret is ever used "
-                    + "(see Slack's \"Using PKCE\" doc)."
-            )
-            step(
-                5,
-                "Basic Information → App Credentials: copy the Client ID — only the id; the "
-                    + "secret stays where it is, unused — into the field above."
+                2,
+                "Basic Information → App Credentials: copy the Client ID — only the id — into "
+                    + "the field above, then Save and Connect."
             )
         }
         .padding(.top, OnAirMetrics.gutter)

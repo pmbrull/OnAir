@@ -27,20 +27,22 @@ connection with PKCE (ADR-0012).
 ## 2b. Only if Settings shows a "Client ID" field
 
 That means this build ships no Slack app id — either the shared app is not registered yet, or your
-workspace blocks it and you are bringing your own. Create one (five minutes, once):
+workspace blocks it and you are bringing your own. The app manifest in the README does all of the
+configuration in one paste; [this link](
+https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Flocalhost%3A51234%2Fcallback%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D)
+opens Slack's **Create an app** flow with it pre-filled.
 
-1. <https://api.slack.com/apps> → **Create New App** → **From scratch**, in your workspace.
-2. **OAuth & Permissions** → **User Token Scopes** — *not* Bot Token Scopes, which cannot change
-   your status — add `users.profile:read` and `users.profile:write`.
-3. Same page, **Redirect URLs** → add exactly (Settings has a Copy button):
-   ```
-   https://localhost:51234/callback
-   ```
-   → **Save URLs**. Slack rejects `http://` here; that is the constraint, not a typo.
-4. **OAuth & Permissions** → enable **PKCE**. This marks the app a public client — one-way, and
-   exactly what OnAir needs; no secret is ever used (Slack's "Using PKCE" doc has the details).
-5. **Basic Information** → **App Credentials** → copy the **Client ID** — only the id — into
-   Settings, press Save, then Connect as above.
+Manual equivalent: <https://api.slack.com/apps> → **Create New App** → **From a manifest** → pick
+your workspace → paste the manifest from the README → **Create**.
+
+What the manifest sets, so you can audit rather than trust it: the two user scopes
+(`users.profile:read`, `users.profile:write`), the redirect URL
+(`https://localhost:51234/callback` — Slack rejects `http://`, which is why it is https), PKCE on
+(public client, one-way — no secret is ever used), and **token rotation off** — rotation would
+expire every token in hours, and OnAir has no refresh loop (GAP-0002).
+
+Then: **Basic Information** → **App Credentials** → copy the **Client ID** — only the id — into
+Settings, press Save, and Connect as above.
 
 ## 3. Check it against your own machine
 
@@ -70,7 +72,7 @@ Close it; after a minute the old status comes back.
 | Symptom | Cause |
 |---|---|
 | "Port 51234 is already in use" | Something else holds the port. `lsof -iTCP:51234 -sTCP:LISTEN`. |
-| Exchange fails with a Slack error right after authorising | If using your own app: PKCE not enabled (step 2b.4), or scopes under **Bot** instead of **User** Token Scopes. See also GAP-0002. |
+| Exchange fails with a Slack error right after authorising | If using your own app: it was created without the manifest and PKCE is off, or the scopes are under **Bot** instead of **User** Token Scopes. See also GAP-0002. |
 | Browser says "redirect_uri did not match" | The Redirect URL is not saved, or differs by a character. |
 | Connected, camera on, nothing happens | The menu's last line says why. Most often: you already had a status set and **Replace a status I set myself** is off (ADR-0008). |
 | Launch at login does nothing | `SMAppService` needs a signed bundle. `make app` says whether it signed or fell back to ad-hoc. |
