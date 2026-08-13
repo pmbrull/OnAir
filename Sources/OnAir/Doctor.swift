@@ -113,10 +113,14 @@ enum Doctor {
 
     private static func reportSlack(includeSlack: Bool) async {
         section("Slack")
-        let credentials = TokenStore.credentials()
-        print(
-            "  \(pad("client credentials", 22))\(credentials?.isComplete == true ? "present" : "missing")"
-        )
+        // Which id Connect would use, and where it came from — the same resolution the app runs,
+        // so doctor cannot drift into reporting an id Connect would refuse (ADR-0012).
+        let clientID = switch SlackOAuth.resolveClientID(override: TokenStore.clientIDOverride()) {
+        case .pasted: "your own app's (pasted)"
+        case .builtIn: "built-in shared app"
+        case nil: "missing — no built-in id in this build and none pasted"
+        }
+        print("  \(pad("client id", 22))\(clientID)")
         let hasStored = TokenStore.token() != nil
         print("  \(pad("user credential", 22))\(hasStored ? "present in the Keychain" : "missing")")
         print("  \(pad("redirect URL", 22))\(SlackOAuth.redirectURI())")

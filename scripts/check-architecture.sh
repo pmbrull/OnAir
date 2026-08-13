@@ -61,7 +61,9 @@ if hits=$(grep -rn 'SecItemAdd\|SecItemCopyMatching\|SecItemDelete\|SecItemUpdat
         fail "$hit — reach the Keychain only through TokenStore (A4, ADR-0006)"
     done <<<"$hits"
 fi
-if hits=$(grep -rniE 'UserDefaults[^\n]*\b(token|accessToken|clientSecret)\b' Sources 2>/dev/null); then
+# `verifier` is in the alternation because the PKCE verifier is now the system's second secret:
+# during the connect window, verifier + intercepted code = token (ADR-0012).
+if hits=$(grep -rniE 'UserDefaults[^\n]*\b(token|accessToken|clientSecret|verifier)\b' Sources 2>/dev/null); then
     while IFS= read -r hit; do
         fail "$hit — a credential must never reach UserDefaults (A4, ADR-0006)"
     done <<<"$hits"
@@ -69,10 +71,10 @@ fi
 # String interpolation is how a credential reaches a log line, an error message, or a diagnostic
 # somebody pastes into an issue. The Authorization header is the one place it must happen, so that
 # line is named rather than the rule being weakened to "…unless it looks like a header".
-if hits=$(grep -rnE '\\\([^)]*\b(token|accessToken|clientSecret)\b' Sources 2>/dev/null |
+if hits=$(grep -rnE '\\\([^)]*\b(token|accessToken|clientSecret|verifier)\b' Sources 2>/dev/null |
     grep -v 'SlackClient\.swift:[0-9]*: *request\.setValue("Bearer'); then
     while IFS= read -r hit; do
-        fail "$hit — a credential must never be interpolated into a string (A4, ADR-0006)"
+        fail "$hit — a credential must never be interpolated into a string (A4, ADR-0006/0012)"
     done <<<"$hits"
 fi
 

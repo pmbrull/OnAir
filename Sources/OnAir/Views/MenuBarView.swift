@@ -137,7 +137,7 @@ struct MenuBarView: View {
             return reason
         }
         if case .notConfigured = coordinator.connection {
-            return "Add your Slack app's client id and secret in Settings."
+            return "Add your Slack app's client id in Settings."
         }
         if coordinator.policy.paused {
             return "Paused — your status will not change."

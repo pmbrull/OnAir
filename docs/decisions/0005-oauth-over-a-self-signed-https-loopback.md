@@ -1,6 +1,8 @@
 # ADR-0005 — OAuth over a self-signed HTTPS loopback
 
-- Status: Accepted
+- Status: Accepted — amended by ADR-0012, which removed the pasted client credentials: OnAir is
+  now a public client (PKCE), ships only a client id, and no secret exists anywhere. The loopback
+  listener, its certificate and the reasoning below survive unchanged.
 - Date: 2026-08-12
 
 ## Context

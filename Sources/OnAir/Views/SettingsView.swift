@@ -28,40 +28,47 @@ private struct SlackPane: View {
     @Bindable var coordinator: AppCoordinator
 
     @State private var clientID = ""
-    @State private var clientSecret = ""
     @State private var saveError: String?
     @State private var showSetup = false
+    /// Resolved once per appearance and after every save, not in `body`: resolving reads the
+    /// Keychain, and a synchronous securityd round trip per render is the wrong place for it.
+    @State private var source: SlackOAuth.ClientIDSource?
 
     private var redirectURI: String {
         SlackOAuth.redirectURI()
+    }
+
+    /// The whole point of the public-client design (ADR-0012): when the build carries the shared
+    /// app's id, this pane is one button and no fields.
+    private var hasBuiltInApp: Bool {
+        !SlackOAuth.builtInClientID.isEmpty
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnAirMetrics.padding) {
             connectionSummary
 
-            GroupBox {
-                VStack(alignment: .leading, spacing: OnAirMetrics.gutter) {
-                    FieldRow(label: "Client ID") {
-                        TextField("", text: $clientID)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 240)
+            if !hasBuiltInApp {
+                GroupBox {
+                    VStack(alignment: .leading, spacing: OnAirMetrics.gutter) {
+                        FieldRow(label: "Client ID") {
+                            TextField("", text: $clientID)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: OnAirMetrics.fieldWidth)
+                        }
+                        HStack {
+                            Text("This build ships no Slack app, so it needs the id of yours. "
+                                + "There is no secret to paste — OnAir uses PKCE.")
+                                .font(OnAirFont.caption)
+                                .foregroundStyle(OnAirColor.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Button("Save") { save() }
+                                .disabled(clientID.isEmpty)
+                        }
                     }
-                    FieldRow(label: "Client secret") {
-                        SecureField("", text: $clientSecret)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 240)
-                    }
-                    HStack {
-                        Text("Stored in your Keychain — never in a file or a log.")
-                            .font(OnAirFont.caption)
-                            .foregroundStyle(OnAirColor.textTertiary)
-                        Spacer()
-                        Button("Save") { save() }
-                            .disabled(clientID.isEmpty || clientSecret.isEmpty)
-                    }
+                    .padding(OnAirMetrics.tight)
                 }
-                .padding(OnAirMetrics.tight)
             }
 
             if let saveError {
@@ -70,21 +77,46 @@ private struct SlackPane: View {
                     .foregroundStyle(OnAirColor.danger)
             }
 
+            // A pasted id silently outranking the built-in app would be a trap: the pane would
+            // show one button while Connect used an app the user forgot about, with no way to
+            // see or undo it. So when both exist, say so, and offer the way back (ADR-0012).
+            if hasBuiltInApp, case .pasted = source {
+                HStack(spacing: OnAirMetrics.gutter) {
+                    Text("Connecting with your own Slack app's id, not the built-in one.")
+                        .font(OnAirFont.caption)
+                        .foregroundStyle(OnAirColor.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Use built-in") {
+                        TokenStore.deleteClientIDOverride()
+                        refreshSource()
+                    }
+                }
+            }
+
             HStack(spacing: OnAirMetrics.gutter) {
                 if coordinator.connection.isConnected {
                     Button("Disconnect") { Task { await coordinator.disconnect() } }
                 } else {
                     Button("Connect to Slack") { Task { await coordinator.connect() } }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!hasSavedCredentials)
+                        .disabled(source == nil)
                 }
                 Spacer()
             }
 
-            DisclosureGroup("How to create the Slack app", isExpanded: $showSetup) {
-                setupSteps
+            Text("Connecting opens your browser. It will warn once that localhost's certificate "
+                + "is not trusted — that is OnAir's own callback listener; continue past it.")
+                .font(OnAirFont.caption)
+                .foregroundStyle(OnAirColor.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !hasBuiltInApp {
+                DisclosureGroup("How to create your Slack app", isExpanded: $showSetup) {
+                    setupSteps
+                }
+                .font(OnAirFont.body)
             }
-            .font(OnAirFont.body)
 
             Spacer(minLength: 0)
         }
@@ -103,16 +135,17 @@ private struct SlackPane: View {
 
     private var summaryText: String {
         switch coordinator.connection {
-        case .notConfigured: "No Slack app configured yet."
-        case .disconnected: "Credentials saved. Not connected."
+        case .notConfigured: "This build has no Slack app id yet."
+        case .disconnected: "Ready to connect."
         case .connecting: "Connecting…"
         case let .connected(identity): "Connected as \(identity.userName) in \(identity.teamName)."
         case let .needsReconnect(reason): reason
         }
     }
 
-    /// Written out in the app rather than only in the README, because the redirect URL has to
-    /// match to the character and this is the one place it can be copied instead of retyped.
+    /// Only shown on a build with no baked-in app id — the audience is the person creating the
+    /// shared app (or their own), not every user. In the app rather than only in the README
+    /// because the redirect URL has to match to the character and here it can be copied.
     private var setupSteps: some View {
         VStack(alignment: .leading, spacing: OnAirMetrics.gutter) {
             step(1, "Create an app at api.slack.com/apps → From scratch, in your workspace.")
@@ -139,14 +172,14 @@ private struct SlackPane: View {
             }
             step(
                 4,
-                "Basic Information → App Credentials: copy the Client ID and Client Secret "
-                    + "into the fields above."
+                "OAuth & Permissions → enable PKCE. This marks the app a public client — "
+                    + "one-way, and exactly what OnAir needs: no client secret is ever used "
+                    + "(see Slack's \"Using PKCE\" doc)."
             )
             step(
                 5,
-                "Press Connect. Your browser will warn that the connection is not private — "
-                    + "that is OnAir's own certificate for localhost, which exists because Slack "
-                    + "refuses plain http redirects. Continue past it once."
+                "Basic Information → App Credentials: copy the Client ID — only the id; the "
+                    + "secret stays where it is, unused — into the field above."
             )
         }
         .padding(.top, OnAirMetrics.gutter)
@@ -164,31 +197,22 @@ private struct SlackPane: View {
         }
     }
 
-    private var hasSavedCredentials: Bool {
-        if case .notConfigured = coordinator.connection {
-            return false
-        }
-        return true
+    private func load() {
+        clientID = TokenStore.clientIDOverride() ?? ""
+        refreshSource()
     }
 
-    private func load() {
-        guard let stored = TokenStore.credentials() else { return }
-        clientID = stored.clientID
-        // The secret is loaded back so Save is idempotent and the field does not read as empty
-        // when it is not. It stays in a `SecureField`, and it never leaves this process except
-        // to Slack's token endpoint.
-        clientSecret = stored.clientSecret
+    private func refreshSource() {
+        source = resolvedClientID()
     }
 
     private func save() {
         do {
-            try TokenStore.saveCredentials(
-                SlackOAuth.Credentials(
-                    clientID: clientID.trimmingCharacters(in: .whitespacesAndNewlines),
-                    clientSecret: clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
+            try TokenStore.saveClientIDOverride(
+                clientID.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             saveError = nil
+            refreshSource()
             coordinator.reloadClient()
         } catch {
             saveError = "Could not write to the Keychain: \(error)"
@@ -216,12 +240,12 @@ private struct StatusPane: View {
                         TextField(":movie_camera:", text: $coordinator.policy.status.emoji)
                             .textFieldStyle(.roundedBorder)
                             .font(OnAirFont.mono)
-                            .frame(width: 240)
+                            .frame(width: OnAirMetrics.fieldWidth)
                     }
                     FieldRow(label: "Text") {
                         TextField("On camera", text: $coordinator.policy.status.text)
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 240)
+                            .frame(width: OnAirMetrics.fieldWidth)
                     }
                     // Slack takes the shortcode, not the glyph, and silently keeps the old emoji
                     // when given something it cannot resolve — which looks exactly like OnAir

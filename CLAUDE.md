@@ -61,7 +61,9 @@ make uninstall     # remove the app, its Keychain items and its support director
 - **Never open a capture stream.** Read `IsRunningSomewhere`; nothing else. Invariant A5, ADR-0001.
 - **Never put a credential anywhere but the Keychain** — not `UserDefaults`, not a log, not an
   interpolated string. Invariant A4, ADR-0006.
-- **Never compile in a client secret.** The user's Slack app, the user's secret (ADR-0005).
+- **Never reintroduce a client secret.** OnAir is a public client: PKCE proves the connection,
+  and the only shipped identifier is the public client id (ADR-0012). A `client_secret` appearing
+  anywhere — code, Settings, Keychain — is a regression, not an option.
 - **Never overwrite a status OnAir did not set**, unless the user asked for it (ADR-0008).
 - **Never import AppKit/SwiftUI/ServiceManagement into a kit** (ADR-0002). Invariant A2.
 - **Never put a decision in the app target.** If it changes *whether* something happens, it belongs
@@ -73,15 +75,15 @@ make uninstall     # remove the app, its Keychain items and its support director
 
 ## Current state
 
-v0.1. Everything described above is built and the gate is green: 68 tests in 8 suites, including a
+v0.1. Everything described above is built and the gate is green: 79 tests in 9 suites, including a
 device journey against this Mac's real hardware and a loopback suite that mints a real certificate
 and drives a real TLS listener with `URLSession`.
 
-What is **not** verified against reality is Slack's JSON: the fixtures in
-`Tests/SlackKitTests/SlackResponseFixtures.swift` were written from Slack's documentation because
-no workspace was available, and they are marked as such (GAP-0001). The end-to-end connect flow has
-not been run against a live workspace either — `make doctor-slack` is the command that will, and it
-is read-only.
+What is **not** verified against reality is Slack's side of the wire: the fixtures were written
+from documentation (GAP-0001), and the PKCE exchange — endpoint choice and token longevity — is
+built to the docs but unmeasured (GAP-0002). `SlackOAuth.builtInClientID` is empty until the
+shared Slack app is registered; Settings degrades to a one-field form meanwhile. `make doctor-slack`
+is the read-only live check.
 
 The one measured surprise so far is ADR-0011: the microphone reads *in use* permanently on a Mac
 running an audio mixer, which turned a planned default of "watch both" into "watch the camera, and

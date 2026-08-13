@@ -5,11 +5,18 @@ import Observation
 import SlackKit
 import StatusKit
 
+/// The one place the Keychain override meets the kit's precedence rule. The rule itself lives in
+/// `SlackOAuth.resolveClientID`, where it is tested (A3); this is only the join.
+func resolvedClientID() -> SlackOAuth.ClientIDSource? {
+    SlackOAuth.resolveClientID(override: TokenStore.clientIDOverride())
+}
+
 /// How OnAir stands with Slack right now.
 enum ConnectionState: Equatable {
-    /// No client id and secret yet — the Slack app has not been created.
+    /// No built-in client id in this build and none pasted — Connect has nothing to authorise
+    /// against.
     case notConfigured
-    /// Credentials, but no token: the user has not pressed Connect.
+    /// A client id to authorise with, but no token: the user has not pressed Connect.
     case disconnected
     case connecting
     case connected(SlackIdentity)
@@ -86,6 +93,16 @@ final class AppCoordinator {
     // MARK: - Lifecycle
 
     func start() {
+        // Unconditionally, not lazily on read: the common upgrade path — token present, Settings
+        // never opened — would otherwise never touch the legacy item, and the retired client
+        // secret would sit in the Keychain forever under a README that promises it is gone.
+        if !TokenStore.scrubLegacyClientItem() {
+            note(
+                "Could not remove the retired Slack client secret from the Keychain; "
+                    + "will retry at next launch.",
+                level: .warning
+            )
+        }
         watcher.start { [weak self] snapshot in
             Task { @MainActor in self?.deviceStateChanged(snapshot) }
         }
@@ -117,14 +134,11 @@ final class AppCoordinator {
     // MARK: - Slack connection
 
     func reloadClient() {
-        guard let credentials = TokenStore.credentials(), credentials.isComplete else {
-            client = nil
-            connection = .notConfigured
-            return
-        }
+        // The token outranks the client id: a connected app stays connected even if the id that
+        // bought the token is gone, because the id is only needed to mint the *next* token.
         guard let token = TokenStore.token() else {
             client = nil
-            connection = .disconnected
+            connection = resolvedClientID() == nil ? .notConfigured : .disconnected
             return
         }
         client = SlackClient(token: token)
@@ -149,14 +163,14 @@ final class AppCoordinator {
     }
 
     func connect() async {
-        guard let credentials = TokenStore.credentials(), credentials.isComplete else {
-            note("Add the Slack app's client id and secret first.", level: .warning)
+        guard let source = resolvedClientID() else {
+            note("This build has no Slack app id — add one in Settings.", level: .warning)
             return
         }
         connection = .connecting
         do {
             let session = try SlackOAuthSession(
-                credentials: credentials,
+                clientID: source.id,
                 supportDirectory: PolicyStore.supportDirectory
             )
             openInBrowser(session.authorizationURL)
@@ -187,7 +201,7 @@ final class AppCoordinator {
         engine.forgetOwnership()
         TokenStore.deleteToken()
         client = nil
-        connection = TokenStore.credentials()?.isComplete == true ? .disconnected : .notConfigured
+        connection = resolvedClientID() == nil ? .notConfigured : .disconnected
         note("Disconnected from Slack.")
     }
 

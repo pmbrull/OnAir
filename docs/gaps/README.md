@@ -28,6 +28,7 @@ hardware, not by reasoning.
 | Gap | Title |
 | --- | --- |
 | [0001](open/0001-slack-fixtures-are-documented-not-captured.md) | The Slack response fixtures are documentation-derived, never captured |
+| [0002](open/0002-pkce-flow-unverified-against-a-live-workspace.md) | The PKCE flow and its token longevity are unverified against a live workspace |
 
 ## Closed
 

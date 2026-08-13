@@ -64,10 +64,14 @@ Engine
   nothing to do
 
 Slack
-  client credentials    present
+  client id             built-in shared app
   user credential       present in the Keychain
   redirect URL          https://localhost:51234/callback
 ```
+
+The `client id` row names where the id Connect would use comes from: `built-in shared app` once
+`SlackOAuth.builtInClientID` is filled, `your own app's (pasted)` when an override shadows it, or
+`missing — no built-in id in this build and none pasted` (ADR-0012).
 
 **Read the microphone lines.** If any says `in use` while you are not in a call, something on your
 Mac holds it open permanently — an audio mixer, a virtual device, a noise-suppression tool — and
@@ -77,7 +81,7 @@ is how you find out it applies to you.
 `make test` ends with a line naming the count:
 
 ```
-Test run with 68 tests in 8 suites passed after 2.1 seconds.
+Test run with 79 tests in 9 suites passed after 2.1 seconds.
 ```
 
 The **Device journey** suite disables itself when there is no capture hardware. A CI runner has
@@ -92,8 +96,10 @@ make run
 
 Then, in order:
 
-1. The menu bar shows a `video` glyph. Open it: it should say "Set up Slack".
-2. Settings › Slack: follow the numbered steps, paste the client id and secret, press Save.
+1. The menu bar shows a `video` glyph. Open it: on a build with no baked-in app id it says
+   "Set up Slack"; with one, "Not connected".
+2. Settings › Slack: if a Client ID field is shown, paste your Slack app's id — there is no
+   secret; PKCE replaces it (ADR-0012) — and press Save. The runbook's §2b covers creating the app.
 3. Press **Connect to Slack**. Your browser opens Slack's authorise page. Approve it, then click
    through the "connection is not private" warning — that is OnAir's own certificate for
    `localhost`, and ADR-0005 explains why it has to exist. The tab should end on "OnAir is
@@ -114,6 +120,7 @@ rather than leaving a switch that quietly does nothing.
 
 ## Residue
 
-The loopback certificate lives at `~/Library/Application Support/OnAir/loopback.p12`, and the two
-Keychain items under `io.umamidata.onair`. `make uninstall` removes all three; deleting the bundle
-alone leaves a live Slack token behind.
+The loopback certificate lives at `~/Library/Application Support/OnAir/loopback.p12`, and the
+Keychain items under `io.umamidata.onair` — the user token, plus a client id override if you
+pasted one (ADR-0012). `make uninstall` removes the certificate and both Keychain accounts;
+deleting the bundle alone leaves a live Slack token behind.

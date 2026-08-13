@@ -14,7 +14,8 @@ traffic is three Slack Web API calls on the user's own behalf.
 - **AppKit + SwiftUI**, menu-bar only (`LSUIElement`).
 - **CoreMediaIO + CoreAudio** property listeners for device activity (ADR-0003).
 - **Network.framework** for the TLS loopback that catches Slack's OAuth redirect (ADR-0005).
-- **Security** for the Keychain and PKCS#12 import; **ServiceManagement** for the login item.
+- **Security** for the Keychain, PKCS#12 import and the PKCE verifier's randomness; **CryptoKit**
+  for its S256 challenge (ADR-0012); **ServiceManagement** for the login item.
 
 ## Team
 
@@ -44,7 +45,8 @@ machine, and no unit test in the world would have caught it.
 1. **Opening a capture stream.** OnAir reads "is running" and nothing else (ADR-0001, A5).
 2. **A credential anywhere but the Keychain** — not `UserDefaults`, not a file, not a log line, not
    an interpolated string (ADR-0006, A4).
-3. **A client secret compiled into the binary** (ADR-0005).
+3. **A client secret anywhere in the system** — none is compiled in, pasted in, or stored; PKCE
+   replaces it (ADR-0012).
 4. **Shell string interpolation for subprocesses.** Argument arrays only.
 5. **Any off-machine transmission other than the Slack calls themselves.** No telemetry, no
    analytics, no crash reporting.

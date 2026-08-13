@@ -16,7 +16,9 @@ accordingly.
    error string, not an interpolated string. `TokenStore` is the only file that may call
    `SecItem*`. The one permitted interpolation is the `Authorization: Bearer` header
    (A4, ADR-0006).
-2. **A client secret compiled into the binary** (ADR-0005).
+2. **A client secret anywhere in the system** — compiled in, pasted in, or stored. OnAir is a
+   public client; PKCE replaces the secret, and the only shipped identifier is the public client
+   id (ADR-0012).
 3. **Opening a capture stream.** `AVCaptureSession`, `AVCaptureDevice`, `CMSampleBuffer`,
    `AudioDeviceStart`, `AVAudioEngine`, `CMIODeviceStartStream` — any of these turns a
    permissionless app into one that must ask, and breaks its central claim (A5, ADR-0001).
@@ -34,8 +36,9 @@ accordingly.
   mismatch still fatal rather than logged?
 - **What the callback page renders.** Its query string is attacker-supplied — anything can GET
   `https://localhost:51234/callback?error=<html>`. Output must stay escaped.
-- **`state` entropy.** `SecRandomCopyBytes`, 256 bits. A fallback to `Int.random` on CSPRNG failure
-  would look protected while not being.
+- **`state` and PKCE verifier entropy.** Both come from `SecRandomCopyBytes`, and both refuse to
+  continue on CSPRNG failure. A fallback to `Int.random` would look protected while not being —
+  and a guessable verifier re-opens the intercepted-code attack PKCE exists to close (ADR-0012).
 - **Scope creep.** `users.profile:read` + `users.profile:write`. A new scope is a new capability on
   the user's account and needs an ADR, not a line in a diff.
 - **The loopback key.** It is on disk at 0600 with a constant passphrase, deliberately. If a diff

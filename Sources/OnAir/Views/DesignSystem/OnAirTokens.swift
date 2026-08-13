@@ -43,6 +43,8 @@ enum OnAirMetrics {
     static let dot: CGFloat = 8
     static let panelWidth: CGFloat = 300
     static let settingsWidth: CGFloat = 460
+    /// One width for every form field in Settings, so labels and inputs line up across panes.
+    static let fieldWidth: CGFloat = 240
 }
 
 /// A device's state, as one dot. Decorative: the row's text already says it, so a screen reader

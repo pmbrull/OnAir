@@ -34,10 +34,12 @@ make install && open /Applications/OnAir.app
 Requires macOS 15+ and a Swift 6 toolchain. No dependencies to fetch — there are none
 ([ADR-0004](docs/decisions/0004-no-third-party-dependencies.md)).
 
-Then follow [`docs/runbooks/first-run.md`](docs/runbooks/first-run.md): you create a small Slack app
-of your own, paste its client id and secret once, and press Connect. OnAir ships no client secret,
-because a secret compiled into a distributed binary is not a secret
-([ADR-0005](docs/decisions/0005-oauth-over-a-self-signed-https-loopback.md)).
+Then press **Connect to Slack** in Settings and approve in the browser — that is the whole setup.
+OnAir is a public client ([ADR-0012](docs/decisions/0012-a-public-client-pkce-and-no-secret-anywhere.md)):
+it ships only a Slack app *id* and proves each connection with PKCE, so **no secret exists in the
+binary, in your Keychain, or anywhere else**. Until the shared Slack app is registered, Settings
+shows a single Client ID field instead — [`docs/runbooks/first-run.md`](docs/runbooks/first-run.md)
+covers creating your own app for that case.
 
 ## What it does
 
@@ -72,9 +74,11 @@ it was found by running `doctor`, not by reasoning about it.
   ([ADR-0006](docs/decisions/0006-the-token-lives-in-the-keychain.md)).
 - **The scopes are `users.profile:read` and `users.profile:write`**, user-scoped. No bot token. It
   cannot read your messages, and it is not able to.
-- **The OAuth authorisation code never leaves your machine.** The callback lands on a TLS listener
-  bound to loopback, using a certificate OnAir mints locally. Your browser will warn you about it
-  once; that warning is the price of not routing your login through somebody else's server.
+- **The OAuth authorisation code never leaves your machine, and is useless if stolen.** The
+  callback lands on a TLS listener bound to loopback, using a certificate OnAir mints locally, and
+  PKCE means the code cannot be exchanged without a verifier that never leaves the process. The
+  browser warns about the certificate once; that is the price of not routing your login through
+  somebody else's server.
 - **Nothing else is sent anywhere.** No telemetry, no analytics, no crash reporting.
 
 ## Known limitations
@@ -87,14 +91,16 @@ it was found by running `doctor`, not by reasoning about it.
   need exactly the privileges this app refuses.
 - **Screen sharing without a camera does not count.** Nothing detects it yet.
 - **Slack's responses are not yet verified against a live workspace** — the parser's fixtures come
-  from Slack's documentation, and that is recorded rather than glossed over
-  ([GAP-0001](docs/gaps/open/0001-slack-fixtures-are-documented-not-captured.md)).
+  from Slack's documentation ([GAP-0001](docs/gaps/open/0001-slack-fixtures-are-documented-not-captured.md)),
+  and the PKCE exchange plus token longevity are documented-but-unmeasured
+  ([GAP-0002](docs/gaps/open/0002-pkce-flow-unverified-against-a-live-workspace.md)). Recorded
+  rather than glossed over.
 
 ## Development
 
 ```bash
 make verify   # references + architecture invariants + format + lint + build + test
-make test     # 68 tests in 8 suites — use this, not `swift test`
+make test     # 79 tests in 9 suites — use this, not `swift test`
 ```
 
 `swift test` will not work on a machine with only the Command Line Tools: XCTest ships with Xcode,
@@ -102,12 +108,14 @@ so the suite is written against Swift Testing and `make test` supplies the searc
 not. [`docs/dev-loop.md`](docs/dev-loop.md) has the details.
 
 The repo carries its own working agreement — [`CLAUDE.md`](CLAUDE.md),
-[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with eleven ADRs
+[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with twelve ADRs
 recording every load-bearing choice and the alternative it beat.
 
 ## TODO
 
-- [ ] Run the connect flow against a live workspace and capture real Slack responses (GAP-0001).
+- [ ] Register the shared OnAir Slack app (PKCE on) and fill `SlackOAuth.builtInClientID` (ADR-0012).
+- [ ] Run the connect flow against a live workspace and capture real Slack responses (GAP-0001,
+      GAP-0002 — including whether the token carries an expiry).
 - [ ] Decide whether screen sharing is worth a third signal.
 - [ ] Multiple workspaces, if a second one ever gets daily use.
 - [ ] Revisit the crash net if a stranded status actually happens (ADR-0009).

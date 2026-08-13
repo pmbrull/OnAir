@@ -36,7 +36,7 @@ on the app.
 |---|---|---|---|
 | `DeviceKit` | library | Whether any camera or microphone is running somewhere; the device inventory `doctor` prints; hot-plug re-attachment | Foundation, CoreMediaIO, CoreAudio |
 | `StatusKit` | library | `UserStatus`, `StatusPolicy`, `StatusEngine` — the debounce, the pause, the override verdict and the ownership test. **Depends on nothing** | Foundation |
-| `SlackKit` | library | `SlackClient` (three calls), `SlackWire` (decoding), and the OAuth loopback: `SlackOAuth`, `LoopbackReceiver`, `LoopbackIdentity` | Foundation, Network, Security, StatusKit |
+| `SlackKit` | library | `SlackClient` (three calls), `SlackWire` (decoding), and the OAuth loopback: `SlackOAuth`, `PKCE`, `LoopbackReceiver`, `LoopbackIdentity` | Foundation, Network, Security, CryptoKit, StatusKit |
 | `OnAir` | executable | Menu bar, Settings, `TokenStore`, `PolicyStore`, `LaunchAtLogin`, `AppCoordinator`, `Doctor` | everything above + AppKit, SwiftUI, ServiceManagement |
 
 ## Invariants

@@ -4,9 +4,11 @@ import SlackKit
 
 /// The only door to the Keychain in this app (invariant A4, ADR-0006).
 ///
-/// Two items, both generic passwords under the bundle identifier: the Slack app's client
-/// credentials, and the user token they bought. Neither ever reaches `UserDefaults`, a log line,
-/// or an error string — `scripts/check-architecture.sh` fails the build over all three.
+/// Two items, both generic passwords under the bundle identifier: the user token, and a client id
+/// override when the user brings their own Slack app. The client id is not a secret (ADR-0012),
+/// but it stays here rather than `UserDefaults` so there is exactly one storage story and the
+/// architecture check keeps one boundary to police. Nothing here ever reaches a log line or an
+/// error string — `scripts/check-architecture.sh` fails the build over it.
 enum TokenStore {
     static let service = "io.umamidata.onair"
 
@@ -34,19 +36,41 @@ enum TokenStore {
         delete(account: Account.token)
     }
 
-    // MARK: - The app's own credentials
+    // MARK: - The client id override
 
-    static func credentials() -> SlackOAuth.Credentials? {
+    /// The id of the user's own Slack app, when they use one instead of the built-in shared app.
+    static func clientIDOverride() -> String? {
         guard let data = read(account: Account.credentials) else { return nil }
-        return try? JSONDecoder().decode(SlackOAuth.Credentials.self, from: data)
+        return SlackOAuth.parseStoredClientID(data)?.id
     }
 
-    static func saveCredentials(_ credentials: SlackOAuth.Credentials) throws {
-        try write(JSONEncoder().encode(credentials), account: Account.credentials)
+    static func saveClientIDOverride(_ clientID: String) throws {
+        try write(Data(clientID.utf8), account: Account.credentials)
     }
 
-    static func deleteCredentials() {
+    static func deleteClientIDOverride() {
         delete(account: Account.credentials)
+    }
+
+    /// Rewrites a pre-ADR-0012 item — a JSON pair carrying the retired client secret — down to the
+    /// bare id. Run at every launch rather than lazily on read: the common upgrade path (token
+    /// present, Settings never opened) would otherwise never touch the item, and the secret would
+    /// linger in the Keychain under a README that promises it is gone.
+    ///
+    /// Returns `false` when a legacy item exists and could not be rewritten, so the caller can say
+    /// so instead of the scrub failing silently (`.claude/rules/no-silent-fallbacks.md`); the next
+    /// launch retries.
+    static func scrubLegacyClientItem() -> Bool {
+        guard let data = read(account: Account.credentials),
+              let parsed = SlackOAuth.parseStoredClientID(data),
+              parsed.isLegacyShape
+        else { return true }
+        do {
+            try saveClientIDOverride(parsed.id)
+            return true
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Keychain
