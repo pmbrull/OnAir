@@ -94,3 +94,7 @@ doctor). Invariants: **A4** unchanged in force, narrowed in scope (one credentia
   false` is set explicitly in it: rotation would expire every token in hours and OnAir has no
   refresh loop (GAP-0002). `oauth_config.token_management_enabled` exists in the schema but its
   semantics are undocumented — omitted rather than guessed.
+- 2026-08-13 — First real manifest creation surfaced two facts, both now in `shared-app.md`: the
+  dashboard's "Install to Workspace" button fails a PKCE user-scope app with "No scopes
+  requested" (Connect is the only install path — do not press it), and other workspaces need
+  public distribution activated (a console toggle, not a manifest field; unlisted, no review).

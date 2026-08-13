@@ -10,7 +10,7 @@ The knowledge base. What each thing is, and when to reach for it.
 | [`decisions/`](decisions/) | ADRs — every load-bearing choice, with the live reasoning and the alternative it beat. |
 | [`gaps/`](gaps/) | Questions nothing answers yet, and the escape-hatch rule: record, don't guess. |
 | [`plans/`](plans/) | Units of work proposed before they're built; `active/` vs `completed/`. |
-| [`runbooks/`](runbooks/) | Manual procedures. [`first-run.md`](runbooks/first-run.md): connect, get past the certificate warning — and create your own Slack app only when the build ships no id. |
+| [`runbooks/`](runbooks/) | Manual procedures. [`first-run.md`](runbooks/first-run.md): the user side — connect, get past the certificate warning. [`shared-app.md`](runbooks/shared-app.md): the maintainer side — create the shared Slack app, once ever. |
 
 Structural intent (module boundaries, dependency directions, invariants) lives one level up in
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md); the daily table of contents is

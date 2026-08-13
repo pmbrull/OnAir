@@ -79,6 +79,18 @@ off, or every token would expire in hours and OnAir has no refresh loop (GAP-000
 **Create**: **Basic Information → App Credentials** → copy the **Client ID** — only the id — into
 Settings, Save, Connect.
 
+**Do not press "Install to Workspace" in Slack's dashboard** — that flow cannot drive a PKCE
+user-scope app and fails with "No scopes requested". Pressing **Connect** in OnAir *is* the
+install.
+
+### Who does what, and how often
+
+| | Slack console | How often |
+|---|---|---|
+| **You (user)** | nothing — Connect and approve in the browser | authorise once per workspace |
+| **Maintainer** | create the shared app, activate distribution ([runbook](docs/runbooks/shared-app.md)) | once, ever |
+| **Bring-your-own-app** (workspace blocks the shared one) | create one app from the manifest above | once |
+
 ## What it does
 
 - **Watches the camera** via CoreMediaIO, and the microphone too if you turn it on.

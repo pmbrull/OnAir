@@ -53,6 +53,12 @@ this one.
   (also GAP-0002).
 - Workspaces with admin approval for apps still gate the install. True of every shape; nothing to
   do about it here.
+- **The shared app needs public distribution activated** (dashboard → Manage Distribution;
+  unlisted, no Marketplace review) before any workspace but its home can authorise it — not a
+  manifest field, so it is a one-time console step in `docs/runbooks/shared-app.md`. And Slack's
+  dashboard "Install to Workspace" button cannot drive this app at all: it sends no user scopes
+  and no PKCE challenge, failing with "No scopes requested" — measured on the first real creation
+  attempt. OnAir's Connect flow is the only install path, which is the design working as intended.
 - **The one capability the deleted secret provided is gone: distinguishing OnAir from other
   software on this machine.** Local malware can bind the port while OnAir is idle, drive the
   browser through Slack's consent screen under OnAir's name with its own PKCE pair, and mint a

@@ -1,6 +1,20 @@
 # Runbook — first run
 
-Getting from a fresh clone to a status that changes itself.
+Getting from a fresh clone to a status that changes itself. This is the **user** runbook; the
+maintainer's one-time counterpart is [`shared-app.md`](shared-app.md).
+
+Who does what, and how often:
+
+| Role | Slack console work | How often |
+|---|---|---|
+| Maintainer | create the shared app from the manifest, activate distribution | **once, ever** ([`shared-app.md`](shared-app.md)) |
+| User (shared app baked in) | none — press Connect, approve in the browser | authorise once per workspace |
+| User bringing their own app (§2b) | create one app from the manifest | once, then as above |
+
+"Approve in the browser" is Slack's consent page, not app creation — and it is also what installs
+the app to your workspace. **Never press "Install to Workspace" in Slack's dashboard** for this
+app; that flow sends no user scopes and fails with "No scopes requested" (see
+[`shared-app.md`](shared-app.md) §2).
 
 ## 1. Build and install
 
@@ -72,6 +86,7 @@ Close it; after a minute the old status comes back.
 | Symptom | Cause |
 |---|---|
 | "Port 51234 is already in use" | Something else holds the port. `lsof -iTCP:51234 -sTCP:LISTEN`. |
+| "Invalid permissions requested — No scopes requested" in Slack's dashboard | You pressed the dashboard's Install button, which cannot drive a PKCE user-scope app. Skip it: pressing Connect in OnAir is the install. |
 | Exchange fails with a Slack error right after authorising | If using your own app: it was created without the manifest and PKCE is off, or the scopes are under **Bot** instead of **User** Token Scopes. See also GAP-0002. |
 | Browser says "redirect_uri did not match" | The Redirect URL is not saved, or differs by a character. |
 | Connected, camera on, nothing happens | The menu's last line says why. Most often: you already had a status set and **Replace a status I set myself** is off (ADR-0008). |
