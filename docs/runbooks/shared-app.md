@@ -10,12 +10,17 @@ Authorize, and Settings has no fields.
 opens Slack's **Create an app** flow pre-filled with the manifest from the README. Pick the home
 workspace → **Create**.
 
-**Which workspace?** The home workspace only decides where the app is *administered* — never where
-it can be used, once distribution is on. Two sane choices: the workspace you will actually use
-OnAir in (simplest — and the home workspace needs no distribution step for itself, so §3 can wait
-until an outside workspace wants in), or a personal workspace you own, if the app should outlive
-your membership of the first one. Creating it inside a workspace does **not** bypass that
-workspace's admin approval for app installs.
+**Which workspace?** An app has two unrelated relationships to workspaces: a **home** (where its
+admin console lives, picked here, once) and its **installs** (wherever someone pressed Authorize —
+any workspace, once distribution is on). The standard developer shape, and the one this runbook
+assumes: home = **a personal workspace you own**, so the app's config and lifecycle outlive your
+membership of any workspace that merely *uses* it. Slack's consent page has a workspace picker —
+users (including you) install into whatever workspace they choose there.
+
+Creating the app inside the workspace you use it in also works, needs no distribution step for
+that workspace, and is sometimes exempt from its app-approval policy — but it parks the app's
+administration under that workspace's roof. That is the §2b bring-your-own-app fallback, not the
+main path. Either way, creation does **not** bypass a workspace's admin approval for installs.
 
 The manifest sets the two user scopes, the redirect URL, **PKCE on** and **token rotation off**.
 PKCE marks the app a public client — one-way, by design (ADR-0012).
