@@ -18,6 +18,8 @@ outlives its plan gets a record here; a question with no answer gets a [gap](../
 | [0011](0011-watch-the-camera-by-default-the-microphone-on-request.md) | Watch the camera by default, the microphone only on request |
 | [0012](0012-a-public-client-pkce-and-no-secret-anywhere.md) | A public client: PKCE, one shared app, no secret anywhere |
 | [0013](0013-pause-notifications-in-self-renewing-slices.md) | Pause notifications in self-renewing slices |
+| [0014](0014-render-shortcodes-from-a-vendored-table.md) | Render shortcodes from a vendored table |
+| [0015](0015-carry-the-previous-status-expiry.md) | Carry the previous status's expiry across a restore |
 
 ## Format
 

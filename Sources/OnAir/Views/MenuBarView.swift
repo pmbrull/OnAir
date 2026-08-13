@@ -104,7 +104,10 @@ struct MenuBarView: View {
 
     private var actions: some View {
         VStack(spacing: OnAirMetrics.tight) {
-            Toggle("Pause OnAir", isOn: $coordinator.policy.paused)
+            // The affirmative reading, on by default: the switch is on in the state OnAir spends
+            // nearly all its life in. `isRunning` is `!paused` in `StatusKit`, so the engine still
+            // reasons about the exception and the menu never has to (A3).
+            Toggle("OnAir is running", isOn: $coordinator.policy.isRunning)
                 .font(OnAirFont.body)
                 .toggleStyle(.switch)
                 .controlSize(.mini)
@@ -144,7 +147,9 @@ struct MenuBarView: View {
         }
         return coordinator.policy.status.text.isEmpty
             ? "No status configured."
-            : "\(coordinator.policy.status.emoji) \(coordinator.policy.status.text)"
+            // The glyph, not `:headphones:` — Slack's shortcode is the wire format, and showing
+            // it here shows the user the wire (ADR-0014).
+            : coordinator.policy.status.display
     }
 
     private var subheadColor: Color {

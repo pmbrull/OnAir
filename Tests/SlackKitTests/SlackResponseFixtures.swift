@@ -35,6 +35,24 @@ enum SlackResponseFixtures {
     {"ok":true,"profile":{"title":"","real_name":"Pere","team":"T00000000"}}
     """.utf8)
 
+    /// The shape this whole feature is about: a status written by an integration — Google Calendar
+    /// writes exactly this — which nothing will ever come back to clear, because it is meant to
+    /// expire on its own at the end of the event (ADR-0015). `1_700_003_600` is an arbitrary
+    /// instant; the tests compare against it rather than against a clock.
+    static let profileWithExpiringStatus = Data("""
+    {"ok":true,"profile":{"title":"","phone":"","real_name":"Pere","display_name":"pere",
+    "status_text":"In a meeting \\u2022 Google Calendar","status_emoji":":spiral_calendar_pad:",
+    "status_expiration":1700003600,"team":"T00000000"}}
+    """.utf8)
+
+    /// A status with no `status_expiration` key at all. Documented as always present, so this is
+    /// the schema-change shape: it must throw rather than read as "never expires", because that
+    /// reading is what silently strips somebody else's expiry on the way back (ADR-0015).
+    static let profileMissingExpiration = Data("""
+    {"ok":true,"profile":{"real_name":"Pere","status_text":"On holiday",
+    "status_emoji":":palm_tree:","team":"T00000000"}}
+    """.utf8)
+
     static let authTest = Data("""
     {"ok":true,"url":"https:\\/\\/collate.slack.com\\/","team":"Collate","user":"pere",
     "team_id":"T00000000","user_id":"U00000000"}

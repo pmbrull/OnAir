@@ -65,6 +65,9 @@ make uninstall     # remove the app, its Keychain items and its support director
   and the only shipped identifier is the public client id (ADR-0012). A `client_secret` appearing
   anywhere — code, Settings, Keychain — is a regression, not an option.
 - **Never overwrite a status OnAir did not set**, unless the user asked for it (ADR-0008).
+- **Never restore a status without the expiry it arrived with** (ADR-0015). Google Calendar and
+  friends set `status_expiration` and never come back; putting the words back without the clock
+  strands the status forever. A passed expiry restores as a *clear*, not as the old words.
 - **Never import AppKit/SwiftUI/ServiceManagement into a kit** (ADR-0002). Invariant A2.
 - **Never put a decision in the app target.** If it changes *whether* something happens, it belongs
   in `StatusKit`, where it can be tested. Invariant A3.
@@ -75,7 +78,7 @@ make uninstall     # remove the app, its Keychain items and its support director
 
 ## Current state
 
-v0.1. Everything described above is built and the gate is green: 91 tests in 10 suites, including a
+v0.1. Everything described above is built and the gate is green: 106 tests in 12 suites, including a
 device journey against this Mac's real hardware and a loopback suite that mints a real certificate
 and drives a real TLS listener with `URLSession`.
 

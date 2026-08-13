@@ -39,6 +39,16 @@ public struct StatusPolicy: Sendable, Equatable, Codable {
     /// out `offDelay` would not be a pause.
     public var paused: Bool
 
+    /// The same fact said the way the menu says it, because a switch labelled with the exception
+    /// is off in the state the app spends nearly all its life in — one negation more than a menu
+    /// should ask of anyone. The engine keeps reasoning about `paused`, where the exceptional
+    /// state is the named one; the inversion lives here, under a test, rather than as a `Binding`
+    /// trick in a view (A3).
+    public var isRunning: Bool {
+        get { !paused }
+        set { paused = !newValue }
+    }
+
     public init(
         status: UserStatus,
         watchCamera: Bool,

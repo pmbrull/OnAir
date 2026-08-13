@@ -59,12 +59,12 @@ enum Doctor {
     private static func reportPolicy() -> StatusPolicy {
         let policy = PolicyStore.load()
         section("Policy")
-        print("  \(pad("status", 22))\(policy.status.emoji) \(policy.status.text)")
+        print("  \(pad("status", 22))\(policy.status.display)")
         print("  \(pad("watch camera", 22))\(yesNo(policy.watchCamera))")
         print("  \(pad("watch microphone", 22))\(yesNo(policy.watchMicrophone))")
         print("  \(pad("replace my own", 22))\(yesNo(policy.overrideExistingStatus))")
         print("  \(pad("debounce", 22))on \(Int(policy.onDelay))s / off \(Int(policy.offDelay))s")
-        print("  \(pad("paused", 22))\(yesNo(policy.paused))")
+        print("  \(pad("running", 22))\(yesNo(policy.isRunning))")
         print("")
         return policy
     }
@@ -103,9 +103,11 @@ enum Doctor {
         case .doNothing:
             "nothing to do"
         case let .apply(status):
-            "would set \(status.emoji) \(status.text)"
+            "would set \(status.display)"
         case let .restore(previous):
-            previous.isCleared ? "would clear your status" : "would restore “\(previous.text)”"
+            previous.status.isCleared
+                ? "would clear your status"
+                : "would restore “\(previous.status.text)”"
         }
     }
 
@@ -138,10 +140,13 @@ enum Doctor {
         do {
             let identity = try await client.identity()
             print("  \(pad("identity", 22))\(identity.userName) in \(identity.teamName)")
-            let status = try await client.currentStatus()
+            let live = try await client.currentStatus()
             print(
-                "  \(pad("your status now", 22))\(status.isCleared ? "(none)" : "\(status.emoji) \(status.text)")"
+                "  \(pad("your status now", 22))\(live.status.isCleared ? "(none)" : live.status.display)"
             )
+            // The field ADR-0015 is about. A third-party status carries the clock that will clear
+            // it, and printing it is how the next person sees that OnAir is carrying it too.
+            print("  \(pad("expires", 22))\(describe(expiry: live.expiresAt))")
         } catch let error as SlackError {
             print("  \(error.summary)")
             if error.requiresReconnect {
@@ -164,5 +169,12 @@ enum Doctor {
 
     private static func yesNo(_ value: Bool) -> String {
         value ? "yes" : "no"
+    }
+
+    private static func describe(expiry: Int) -> String {
+        guard expiry > 0 else { return "never (nothing will clear it but you or OnAir)" }
+        let at = Date(timeIntervalSince1970: TimeInterval(expiry))
+        let when = at.formatted(date: .abbreviated, time: .shortened)
+        return at > Date() ? "\(when) — Slack will clear it then" : "\(when) — already passed"
     }
 }

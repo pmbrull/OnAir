@@ -52,11 +52,16 @@ public enum SlackWire {
     /// `users.profile.get`. A profile with no status has both fields present and empty; a missing
     /// key is a schema change, not an empty status, so it throws rather than reading as cleared —
     /// treating it as cleared would make OnAir believe it may overwrite a status it never saw.
+    ///
+    /// `status_expiration` is read for the same reason and held to the same bar: "never expires"
+    /// and "Slack did not tell us" must not be the same value, because OnAir writes this field
+    /// back on a restore and defaulting it to `0` is what strands a Google Calendar status forever
+    /// (ADR-0015). Its presence is documentation-derived — GAP-0001.
     public static func status(
         _ data: Data,
         status: Int,
         retryAfter: String? = nil
-    ) throws -> UserStatus {
+    ) throws -> LiveStatus {
         let json = try envelope(data, status: status, retryAfter: retryAfter)
         guard let profile = json["profile"] as? [String: Any] else {
             throw SlackError.malformedResponse("no profile object")
@@ -66,7 +71,13 @@ public enum SlackWire {
         else {
             throw SlackError.malformedResponse("profile has no status_emoji/status_text")
         }
-        return UserStatus(emoji: emoji, text: text)
+        guard let expiration = profile["status_expiration"] as? Int else {
+            throw SlackError.malformedResponse("profile has no status_expiration")
+        }
+        return LiveStatus(
+            status: UserStatus(emoji: emoji, text: text),
+            expiresAt: expiration
+        )
     }
 
     /// `auth.test`.
@@ -126,15 +137,19 @@ public enum SlackWire {
 
     /// The body of `users.profile.set`.
     ///
-    /// `status_expiration: 0` is sent explicitly rather than omitted: OnAir owns the whole status
-    /// while it holds it, and leaving the key out lets an expiry set by something else survive
-    /// underneath and clear the status at a time OnAir would then attribute to the user.
-    public static func profileSetBody(_ status: UserStatus) throws -> Data {
+    /// `status_expiration` is always sent explicitly rather than omitted: omitting it lets an
+    /// expiry set by something else survive underneath and clear the status at a time OnAir would
+    /// then attribute to the user.
+    ///
+    /// It defaults to `0` because OnAir's own status never expires (ADR-0009). The one caller that
+    /// passes anything else is the restore, putting back the expiry the previous status arrived
+    /// with — its own clock, not one OnAir chose (ADR-0015).
+    public static func profileSetBody(_ status: UserStatus, expiresAt: Int = 0) throws -> Data {
         let payload: [String: Any] = [
             "profile": [
                 "status_text": status.text,
                 "status_emoji": status.emoji,
-                "status_expiration": 0,
+                "status_expiration": expiresAt,
             ],
         ]
         return try JSONSerialization.data(withJSONObject: payload)

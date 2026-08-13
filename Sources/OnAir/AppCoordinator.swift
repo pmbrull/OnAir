@@ -126,7 +126,7 @@ final class AppCoordinator {
             engine.recordRestored()
             return
         }
-        try? await client.setStatus(previous)
+        _ = try? await putBack(previous, using: client)
         engine.recordRestored()
     }
 
@@ -202,7 +202,7 @@ final class AppCoordinator {
         if let client {
             await releaseSnoozeIfOwned(using: client)
             if let previous = engine.appliedPrevious {
-                try? await client.setStatus(previous)
+                _ = try? await putBack(previous, using: client)
             }
         }
         engine.forgetOwnership()
@@ -292,24 +292,24 @@ final class AppCoordinator {
         if let previous = engine.appliedPrevious {
             try await client.setStatus(wanted)
             engine.recordApplied(status: wanted, previous: previous)
-            note("Updated your status to \(wanted.text).")
+            note("Updated your status to \(wanted.display).")
             await beginSnoozeIfWanted(using: client)
             return
         }
 
         let live = try await client.currentStatus()
-        if case let .leaveAlone(reason) = policy.verdict(forLive: live) {
+        if case let .leaveAlone(reason) = policy.verdict(forLive: live.status) {
             engine.recordSkipped(reason)
-            note("Left your status alone — “\(live.text)” was already set.", level: .warning)
+            note("Left your status alone — “\(live.status.text)” was already set.", level: .warning)
             return
         }
         try await client.setStatus(wanted)
         engine.recordApplied(status: wanted, previous: live)
-        note("Set your status to \(wanted.text).")
+        note("Set your status to \(wanted.display).")
         await beginSnoozeIfWanted(using: client)
     }
 
-    private func restore(_ previous: UserStatus, using client: SlackClient) async throws {
+    private func restore(_ previous: LiveStatus, using client: SlackClient) async throws {
         let live = try await client.currentStatus()
         guard engine.stillOwns(live) else {
             // Changed by hand during the call. OnAir does not own it any more, and putting the
@@ -324,10 +324,29 @@ final class AppCoordinator {
             await releaseSnoozeIfOwned(using: client)
             return
         }
-        try await client.setStatus(previous)
+        let outcome = try await putBack(previous, using: client)
         engine.recordRestored()
-        note(previous.isCleared ? "Cleared your status." : "Put “\(previous.text)” back.")
+        note(outcome)
         await releaseSnoozeIfOwned(using: client)
+    }
+
+    /// Put a stashed status back the way it was always going to end.
+    ///
+    /// The expiry travels with it: a status written by Google Calendar or any other integration
+    /// carries the clock that was going to clear it, and those integrations do not come back to
+    /// tidy up — writing the words without the clock is what leaves someone "In a meeting" for the
+    /// rest of the day (ADR-0015). The decision of *which* of the two things to write is
+    /// `LiveStatus.restoration`, in `StatusKit`, where it is tested (A3).
+    private func putBack(_ previous: LiveStatus, using client: SlackClient) async throws -> String {
+        switch previous.restoration(now: Date()) {
+        case let .put(status, expiresAt):
+            try await client.setStatus(status, expiresAt: expiresAt)
+            return status.isCleared ? "Cleared your status." : "Put “\(status.text)” back."
+        case .expired:
+            try await client.setStatus(.cleared)
+            return "“\(previous.status.text)” expired during your call — cleared your status "
+                + "instead of putting it back."
+        }
     }
 
     // MARK: - Notifications (ADR-0013)

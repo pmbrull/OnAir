@@ -61,7 +61,25 @@ struct StatusPolicyTests {
         #expect(standard.onDelay == 3)
         #expect(standard.offDelay == 60)
         #expect(!standard.paused)
+        #expect(standard.isRunning, "the menu's switch is on out of the box")
         #expect(standard.status.emoji == ":movie_camera:")
+    }
+
+    /// The menu binds `isRunning`, so a one-way inversion would give a switch that turns OnAir off
+    /// and cannot turn it back on.
+    @Test("isRunning is the inverse of paused, in both directions")
+    func runningInvertsPaused() {
+        var rules = StatusPolicy.standard
+        rules.isRunning = false
+        #expect(rules.paused)
+        #expect(!rules.isRunning)
+
+        rules.isRunning = true
+        #expect(!rules.paused)
+        #expect(rules.isRunning)
+
+        rules.paused = true
+        #expect(!rules.isRunning)
     }
 
     @Test("a policy round-trips")

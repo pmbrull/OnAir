@@ -6,8 +6,10 @@ public enum StatusIntent: Sendable, Equatable {
     /// Write this status. Whether the write is allowed depends on what Slack currently holds,
     /// which only the caller can see — see `StatusEngine.appliedPrevious`.
     case apply(UserStatus)
-    /// Put this back, if and only if Slack still holds what OnAir set (ADR-0008).
-    case restore(UserStatus)
+    /// Put this back, if and only if Slack still holds what OnAir set (ADR-0008). It carries the
+    /// expiry it had when OnAir stashed it, because that expiry is the only thing that was ever
+    /// going to clear it (ADR-0015).
+    case restore(LiveStatus)
 }
 
 /// One turn of the loop.
@@ -44,7 +46,7 @@ public struct StatusEngine: Sendable, Equatable {
         /// OnAir has written nothing.
         case idle
         /// OnAir wrote `status`, over a status that read `previous` (often `.cleared`).
-        case applied(status: UserStatus, previous: UserStatus)
+        case applied(status: UserStatus, previous: LiveStatus)
         /// OnAir deliberately wrote nothing and will not reconsider until the devices go idle.
         /// Without this the engine would re-read the profile on every single tick of a meeting.
         case skipped(SkipReason)
@@ -87,9 +89,13 @@ public struct StatusEngine: Sendable, Equatable {
     /// The guard on every restore (ADR-0008). Editing your status by hand during a call is a
     /// deliberate act, and putting the old one back over it would undo that edit silently — the
     /// one failure mode here that destroys information rather than merely being wrong.
-    public func stillOwns(_ live: UserStatus) -> Bool {
+    ///
+    /// The expiry counts as part of "byte-identical": OnAir writes its own status with
+    /// `status_expiration: 0` (ADR-0009), so an expiry that has appeared under the same words is
+    /// evidence somebody else wrote them.
+    public func stillOwns(_ live: LiveStatus) -> Bool {
         guard let ours = appliedStatus else { return false }
-        return live == ours
+        return live == LiveStatus(status: ours, expiresAt: 0)
     }
 
     /// What was there before OnAir wrote, or `nil` if OnAir has written nothing.
@@ -98,7 +104,7 @@ public struct StatusEngine: Sendable, Equatable {
     /// must ask Slack what is there and stash it, and on a refresh it must not — the live status
     /// is OnAir's own, and stashing that would make the eventual restore a no-op that strands the
     /// status forever.
-    public var appliedPrevious: UserStatus? {
+    public var appliedPrevious: LiveStatus? {
         if case let .applied(_, previous) = applied {
             return previous
         }
@@ -174,7 +180,7 @@ public struct StatusEngine: Sendable, Equatable {
 
     // MARK: - Reporting back
 
-    public mutating func recordApplied(status: UserStatus, previous: UserStatus) {
+    public mutating func recordApplied(status: UserStatus, previous: LiveStatus) {
         applied = .applied(status: status, previous: previous)
     }
 

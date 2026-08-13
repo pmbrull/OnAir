@@ -226,6 +226,13 @@ private struct StatusPane: View {
         (":speech_balloon:", "On a call"),
     ]
 
+    /// The glyph OnAir can resolve for what is typed, or `nil` when it cannot. `nil` does **not**
+    /// mean Slack will reject it — a workspace custom emoji resolves nowhere but Slack — so the
+    /// caption below says exactly that rather than calling it invalid (ADR-0014).
+    private var resolvedGlyph: String? {
+        EmojiShortcode.glyph(for: coordinator.policy.status.emoji)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: OnAirMetrics.padding) {
             GroupBox {
@@ -235,6 +242,11 @@ private struct StatusPane: View {
                             .textFieldStyle(.roundedBorder)
                             .font(OnAirFont.mono)
                             .frame(width: OnAirMetrics.fieldWidth)
+                        Text(resolvedGlyph ?? " ")
+                            .font(OnAirFont.title)
+                            .accessibilityLabel(
+                                resolvedGlyph == nil ? "Emoji not recognised" : "Emoji preview"
+                            )
                     }
                     FieldRow(label: "Text") {
                         TextField("On camera", text: $coordinator.policy.status.text)
@@ -244,17 +256,19 @@ private struct StatusPane: View {
                     // Slack takes the shortcode, not the glyph, and silently keeps the old emoji
                     // when given something it cannot resolve — which looks exactly like OnAir
                     // failing to write.
-                    Text("Slack wants the shortcode with colons, like :movie_camera:.")
+                    Text(emojiHint)
                         .font(OnAirFont.caption)
                         .foregroundStyle(OnAirColor.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(OnAirMetrics.tight)
             }
 
             HStack(spacing: OnAirMetrics.gutter) {
                 ForEach(Self.presets, id: \.0) { emoji, text in
-                    Button(text) {
-                        coordinator.policy.status = UserStatus(emoji: emoji, text: text)
+                    let status = UserStatus(emoji: emoji, text: text)
+                    Button(status.display) {
+                        coordinator.policy.status = status
                     }
                     .font(OnAirFont.compact)
                 }
@@ -289,6 +303,18 @@ private struct StatusPane: View {
 
             Spacer(minLength: 0)
         }
+    }
+
+    private var emojiHint: String {
+        let base = "Slack wants the shortcode with colons, like :movie_camera:."
+        guard !coordinator.policy.status.emoji.isEmpty, resolvedGlyph == nil else {
+            return base
+        }
+        // Not "invalid": OnAir's table is the standard set, and a workspace custom emoji is real
+        // to Slack and unknowable here. Saying which of the two this is would be inventing a fact.
+        return base + " OnAir does not know this one, so it cannot show you the glyph — if it is "
+            + "one of your workspace's custom emoji Slack will still resolve it, and if it is a "
+            + "typo Slack keeps your old emoji and nothing appears to happen."
     }
 }
 

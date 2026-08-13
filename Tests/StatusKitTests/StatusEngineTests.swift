@@ -13,6 +13,8 @@ struct StatusEngineTests {
     private let start = Date(timeIntervalSince1970: 1_700_000_000)
     private let onCamera = UserStatus(emoji: ":movie_camera:", text: "On camera")
     private let standup = UserStatus(emoji: ":coffee:", text: "Standup")
+    /// What Slack holds before OnAir writes: the status, plus the expiry only Slack knows about.
+    private let standupLive = LiveStatus(status: UserStatus(emoji: ":coffee:", text: "Standup"))
 
     private func policy(
         onDelay: TimeInterval = 3,
@@ -38,7 +40,7 @@ struct StatusEngineTests {
     }
 
     /// Drives the engine to the state it is in during a call OnAir already owns.
-    private func engineMidCall(previous: UserStatus = .cleared) -> StatusEngine {
+    private func engineMidCall(previous: LiveStatus = .cleared) -> StatusEngine {
         var engine = StatusEngine()
         let rules = policy()
         _ = engine.advance(cameraInUse: true, microphoneInUse: false, policy: rules, now: at(0))
@@ -157,19 +159,19 @@ struct StatusEngineTests {
 
     @Test("un-watching the camera mid-call releases the status")
     func unwatchingReleases() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         let rules = policy(offDelay: 0, watchCamera: false)
         let decision = engine.advance(
             cameraInUse: true, microphoneInUse: false, policy: rules, now: at(10)
         )
-        #expect(decision.intent == .restore(standup))
+        #expect(decision.intent == .restore(standupLive))
     }
 
     // MARK: - Turning off
 
     @Test("camera off waits for the off-delay before restoring")
     func offDelayIsRespected() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         let rules = policy(offDelay: 60)
         let pending = engine.advance(
             cameraInUse: false, microphoneInUse: false, policy: rules, now: at(10)
@@ -180,14 +182,14 @@ struct StatusEngineTests {
         let restored = engine.advance(
             cameraInUse: false, microphoneInUse: false, policy: rules, now: at(70)
         )
-        #expect(restored.intent == .restore(standup))
+        #expect(restored.intent == .restore(standupLive))
     }
 
     /// The reason `offDelay` is long: back-to-back meetings should not write to Slack twice in
     /// the gap between them.
     @Test("a gap shorter than the off-delay neither restores nor re-applies")
     func backToBackMeetings() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         let rules = policy(offDelay: 60)
         _ = engine.advance(cameraInUse: false, microphoneInUse: false, policy: rules, now: at(10))
         let backOn = engine.advance(
@@ -210,14 +212,14 @@ struct StatusEngineTests {
 
     @Test("pause restores immediately rather than waiting out the off-delay")
     func pauseIsImmediate() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         let decision = engine.advance(
             cameraInUse: true,
             microphoneInUse: false,
             policy: policy(offDelay: 600, paused: true),
             now: at(10)
         )
-        #expect(decision.intent == .restore(standup))
+        #expect(decision.intent == .restore(standupLive))
         #expect(decision.wakeAt == nil)
     }
 
@@ -232,7 +234,7 @@ struct StatusEngineTests {
 
     @Test("un-pausing while the camera is still on starts the on-delay again")
     func unpausing() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         _ = engine.advance(
             cameraInUse: true, microphoneInUse: false, policy: policy(paused: true), now: at(10)
         )
@@ -275,7 +277,7 @@ struct StatusEngineTests {
 
     @Test("changing the status mid-call re-applies it")
     func editMidCall() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         var edited = policy()
         edited.status = UserStatus(emoji: ":red_circle:", text: "On air")
         let decision = engine.advance(
@@ -288,16 +290,16 @@ struct StatusEngineTests {
     /// thing to restore, and the restore would then be a no-op that strands it (ADR-0008).
     @Test("a refresh must keep the original previous")
     func refreshKeepsPrevious() {
-        var engine = engineMidCall(previous: standup)
-        #expect(engine.appliedPrevious == standup)
+        var engine = engineMidCall(previous: standupLive)
+        #expect(engine.appliedPrevious == standupLive)
         let refreshed = UserStatus(emoji: ":red_circle:", text: "On air")
         engine.recordApplied(status: refreshed, previous: engine.appliedPrevious ?? .cleared)
-        #expect(engine.appliedPrevious == standup)
+        #expect(engine.appliedPrevious == standupLive)
 
         let decision = engine.advance(
             cameraInUse: false, microphoneInUse: false, policy: policy(offDelay: 0), now: at(20)
         )
-        #expect(decision.intent == .restore(standup))
+        #expect(decision.intent == .restore(standupLive))
     }
 
     // MARK: - Failure
@@ -319,22 +321,22 @@ struct StatusEngineTests {
 
     @Test("a failed restore is offered again")
     func failedRestoreRetries() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         let rules = policy(offDelay: 0)
         let first = engine.advance(
             cameraInUse: false, microphoneInUse: false, policy: rules, now: at(10)
         )
-        #expect(first.intent == .restore(standup))
+        #expect(first.intent == .restore(standupLive))
         engine.recordFailed()
         let second = engine.advance(
             cameraInUse: false, microphoneInUse: false, policy: rules, now: at(11)
         )
-        #expect(second.intent == .restore(standup))
+        #expect(second.intent == .restore(standupLive))
     }
 
     @Test("restoring stops once it is reported")
     func restoreStops() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         let rules = policy(offDelay: 0)
         _ = engine.advance(cameraInUse: false, microphoneInUse: false, policy: rules, now: at(10))
         engine.recordRestored()
@@ -349,7 +351,7 @@ struct StatusEngineTests {
 
     @Test("forgetting ownership drops the pending restore")
     func forgetOwnership() {
-        var engine = engineMidCall(previous: standup)
+        var engine = engineMidCall(previous: standupLive)
         engine.forgetOwnership()
         let decision = engine.advance(
             cameraInUse: false, microphoneInUse: false, policy: policy(offDelay: 0), now: at(10)
@@ -359,13 +361,18 @@ struct StatusEngineTests {
 
     @Test("stillOwns is true only for exactly what was written")
     func ownership() {
-        var engine = engineMidCall(previous: standup)
-        #expect(engine.stillOwns(onCamera))
-        #expect(!engine.stillOwns(UserStatus(emoji: ":movie_camera:", text: "On camera ")))
-        #expect(!engine.stillOwns(standup))
+        var engine = engineMidCall(previous: standupLive)
+        #expect(engine.stillOwns(LiveStatus(status: onCamera)))
+        #expect(!engine.stillOwns(
+            LiveStatus(status: UserStatus(emoji: ":movie_camera:", text: "On camera "))
+        ))
+        #expect(!engine.stillOwns(standupLive))
         #expect(!engine.stillOwns(.cleared))
+        // OnAir writes `status_expiration: 0`, so the same words carrying an expiry are somebody
+        // else's writing, not OnAir's (ADR-0015).
+        #expect(!engine.stillOwns(LiveStatus(status: onCamera, expiresAt: 1_700_000_900)))
 
         engine.recordRestored()
-        #expect(!engine.stillOwns(onCamera), "a released engine owns nothing")
+        #expect(!engine.stillOwns(LiveStatus(status: onCamera)), "a released engine owns nothing")
     }
 }
