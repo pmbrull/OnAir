@@ -105,6 +105,25 @@ public enum SlackWire {
         return token
     }
 
+    /// `dnd.info` and `dnd.setSnooze` share this shape. One documented quirk the parser leans on:
+    /// `snooze_enabled` and `snooze_endtime` are present **only while a snooze is active** — an
+    /// absent key here genuinely means "not snoozing", unlike the profile, where an absent status
+    /// key means the schema changed (GAP-0001 marks this as documentation-derived).
+    public static func snoozeState(
+        _ data: Data,
+        status: Int,
+        retryAfter: String? = nil
+    ) throws -> SnoozeState {
+        let json = try envelope(data, status: status, retryAfter: retryAfter)
+        guard json["snooze_enabled"] as? Bool == true else { return .off }
+        guard let endtime = json["snooze_endtime"] as? Int else {
+            // Snoozing with no endtime is a shape Slack does not document; inventing one would
+            // corrupt the ownership rule, which compares endtimes exactly (ADR-0013).
+            throw SlackError.malformedResponse("snooze_enabled with no snooze_endtime")
+        }
+        return SnoozeState(isSnoozing: true, endsAt: endtime)
+    }
+
     /// The body of `users.profile.set`.
     ///
     /// `status_expiration: 0` is sent explicitly rather than omitted: OnAir owns the whole status

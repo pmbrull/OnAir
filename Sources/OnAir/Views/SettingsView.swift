@@ -272,6 +272,21 @@ private struct StatusPane: View {
                 }
             }
 
+            Toggle(isOn: $coordinator.policy.pauseNotifications) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Also pause notifications (Do Not Disturb)")
+                        .font(OnAirFont.body)
+                    Text("Snoozes Slack while you are on camera, in half-hour slices that renew "
+                        + "themselves, and resumes afterwards. A snooze you set yourself is never "
+                        + "touched. Needs extra permissions: if you connected before this option "
+                        + "existed, disconnect and reconnect once. Takes effect from the next "
+                        + "call.")
+                        .font(OnAirFont.caption)
+                        .foregroundStyle(OnAirColor.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Spacer(minLength: 0)
         }
     }

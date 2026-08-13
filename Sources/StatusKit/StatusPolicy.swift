@@ -21,6 +21,12 @@ public struct StatusPolicy: Sendable, Equatable, Codable {
     /// that loses information rather than merely being wrong.
     public var overrideExistingStatus: Bool
 
+    /// Whether to also snooze Slack's notifications while a device is in use (ADR-0013). Off by
+    /// default: it is additive, it needs the `dnd` scopes — a connection made before this feature
+    /// has to reconnect before it can work — and silencing someone's notifications is not a thing
+    /// to opt them into.
+    public var pauseNotifications: Bool
+
     /// Seconds a device must stay in use before OnAir writes anything. Cameras blip when an app
     /// enumerates them, and a blip should not reach your colleagues.
     public var onDelay: TimeInterval
@@ -38,6 +44,7 @@ public struct StatusPolicy: Sendable, Equatable, Codable {
         watchCamera: Bool,
         watchMicrophone: Bool,
         overrideExistingStatus: Bool,
+        pauseNotifications: Bool = false,
         onDelay: TimeInterval,
         offDelay: TimeInterval,
         paused: Bool
@@ -46,6 +53,7 @@ public struct StatusPolicy: Sendable, Equatable, Codable {
         self.watchCamera = watchCamera
         self.watchMicrophone = watchMicrophone
         self.overrideExistingStatus = overrideExistingStatus
+        self.pauseNotifications = pauseNotifications
         self.onDelay = onDelay
         self.offDelay = offDelay
         self.paused = paused
@@ -56,6 +64,7 @@ public struct StatusPolicy: Sendable, Equatable, Codable {
         watchCamera: true,
         watchMicrophone: false,
         overrideExistingStatus: false,
+        pauseNotifications: false,
         onDelay: 3,
         offDelay: 60,
         paused: false
@@ -74,6 +83,9 @@ public struct StatusPolicy: Sendable, Equatable, Codable {
         overrideExistingStatus = try container
             .decodeIfPresent(Bool.self, forKey: .overrideExistingStatus)
             ?? fallback.overrideExistingStatus
+        pauseNotifications = try container
+            .decodeIfPresent(Bool.self, forKey: .pauseNotifications)
+            ?? fallback.pauseNotifications
         onDelay = try container.decodeIfPresent(TimeInterval.self, forKey: .onDelay)
             ?? fallback.onDelay
         offDelay = try container.decodeIfPresent(TimeInterval.self, forKey: .offDelay)

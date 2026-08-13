@@ -17,6 +17,7 @@ outlives its plan gets a record here; a question with no answer gets a [gap](../
 | [0010](0010-semantic-system-colours-not-a-palette.md) | Semantic system colours, not a palette |
 | [0011](0011-watch-the-camera-by-default-the-microphone-on-request.md) | Watch the camera by default, the microphone only on request |
 | [0012](0012-a-public-client-pkce-and-no-secret-anywhere.md) | A public client: PKCE, one shared app, no secret anywhere |
+| [0013](0013-pause-notifications-in-self-renewing-slices.md) | Pause notifications in self-renewing slices |
 
 ## Format
 

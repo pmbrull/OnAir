@@ -75,7 +75,7 @@ make uninstall     # remove the app, its Keychain items and its support director
 
 ## Current state
 
-v0.1. Everything described above is built and the gate is green: 79 tests in 9 suites, including a
+v0.1. Everything described above is built and the gate is green: 91 tests in 10 suites, including a
 device journey against this Mac's real hardware and a loopback suite that mints a real certificate
 and drives a real TLS listener with `URLSession`.
 

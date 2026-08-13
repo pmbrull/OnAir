@@ -24,7 +24,7 @@ struct SlackOAuthTests {
         #expect(items["redirect_uri"] == "https://localhost:51234/callback")
         // `scope` would ask for a bot token, which cannot set anybody's status.
         #expect(items["scope"] == nil)
-        #expect(items["user_scope"] == "users.profile:read,users.profile:write")
+        #expect(items["user_scope"] == "users.profile:read,users.profile:write,dnd:read,dnd:write")
         #expect(items["code_challenge"] == pkce.challenge)
         #expect(items["code_challenge_method"] == "S256")
         // The verifier is the secret half; on the authorize URL it would be visible to the

@@ -70,6 +70,8 @@ final class AppCoordinator {
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
     @ObservationIgnored private var pumpAgain = false
     @ObservationIgnored private var retryDelay: TimeInterval = AppCoordinator.minimumRetry
+    @ObservationIgnored private var snoozeOwnership = SnoozeOwnership()
+    @ObservationIgnored private var snoozeRenewalTask: Task<Void, Never>?
 
     private static let minimumRetry: TimeInterval = 15
     private static let maximumRetry: TimeInterval = 300
@@ -114,7 +116,9 @@ final class AppCoordinator {
     /// gets whatever time the run loop has left rather than a guarantee — which is exactly why
     /// there is no other safety net and why the README says so (ADR-0009).
     func restoreBeforeQuit() async {
-        guard let client, let previous = engine.appliedPrevious else { return }
+        guard let client else { return }
+        await releaseSnoozeIfOwned(using: client)
+        guard let previous = engine.appliedPrevious else { return }
         // ADR-0008 applies on the way out too. Quitting is not a licence to overwrite a status the
         // user typed during the call — the check costs one extra call inside the window
         // `.terminateLater` buys, and skipping it would make quitting the one path that clobbers.
@@ -195,10 +199,14 @@ final class AppCoordinator {
     /// Disconnecting puts the status back first. Dropping the token while OnAir still holds the
     /// status would strand it with nothing left that could restore it.
     func disconnect() async {
-        if let client, let previous = engine.appliedPrevious {
-            try? await client.setStatus(previous)
+        if let client {
+            await releaseSnoozeIfOwned(using: client)
+            if let previous = engine.appliedPrevious {
+                try? await client.setStatus(previous)
+            }
         }
         engine.forgetOwnership()
+        snoozeOwnership.recordEnded()
         TokenStore.deleteToken()
         client = nil
         connection = resolvedClientID() == nil ? .notConfigured : .disconnected
@@ -285,6 +293,7 @@ final class AppCoordinator {
             try await client.setStatus(wanted)
             engine.recordApplied(status: wanted, previous: previous)
             note("Updated your status to \(wanted.text).")
+            await beginSnoozeIfWanted(using: client)
             return
         }
 
@@ -297,23 +306,152 @@ final class AppCoordinator {
         try await client.setStatus(wanted)
         engine.recordApplied(status: wanted, previous: live)
         note("Set your status to \(wanted.text).")
+        await beginSnoozeIfWanted(using: client)
     }
 
     private func restore(_ previous: UserStatus, using client: SlackClient) async throws {
         let live = try await client.currentStatus()
         guard engine.stillOwns(live) else {
             // Changed by hand during the call. OnAir does not own it any more, and putting the
-            // old one back would silently undo a deliberate edit (ADR-0008).
+            // old one back would silently undo a deliberate edit (ADR-0008). The snooze is a
+            // separate ownership with its own check — standing down on the status does not mean
+            // abandoning a snooze OnAir started.
             engine.recordRestored()
             note(
                 "Your status changed while you were on camera — left it as it is.",
                 level: .warning
             )
+            await releaseSnoozeIfOwned(using: client)
             return
         }
         try await client.setStatus(previous)
         engine.recordRestored()
         note(previous.isCleared ? "Cleared your status." : "Put “\(previous.text)” back.")
+        await releaseSnoozeIfOwned(using: client)
+    }
+
+    // MARK: - Notifications (ADR-0013)
+
+    /// Snooze failures deliberately never throw into the status path: the status is the primary
+    /// job, and a broken snooze — most likely `missing_scope` on a pre-ADR-0013 connection — must
+    /// not make the engine retry a status write that already succeeded.
+    private func beginSnoozeIfWanted(using client: SlackClient) async {
+        guard policy.pauseNotifications, !snoozeOwnership.ownsASnooze else { return }
+        do {
+            let live = try await client.snoozeState()
+            guard policy.snoozeVerdict(forLive: live) == .start else {
+                note(
+                    "Left Do Not Disturb alone — you already have a snooze running.",
+                    level: .warning
+                )
+                return
+            }
+            let set = try await client.setSnooze(minutes: StatusPolicy.snoozeSliceMinutes)
+            guard let endtime = set.endsAt else {
+                note("Slack accepted the snooze but reported no end time.", level: .warning)
+                return
+            }
+            snoozeOwnership.recordStarted(endtime: endtime)
+            note("Paused Slack notifications.")
+            scheduleSnoozeRenewal()
+        } catch let error as SlackError {
+            reportSnoozeProblem(error)
+        } catch {
+            note("Could not pause notifications.", level: .warning)
+        }
+    }
+
+    /// Each slice is renewed shortly before it lapses, for as long as OnAir still owns the
+    /// snooze. Slices rather than one long snooze so a crash self-heals within
+    /// `snoozeSliceMinutes` — the opposite trade to the status (ADR-0009 vs ADR-0013).
+    private func scheduleSnoozeRenewal() {
+        snoozeRenewalTask?.cancel()
+        snoozeRenewalTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(StatusPolicy.snoozeRenewalDelay))
+            guard !Task.isCancelled else { return }
+            await renewSnooze()
+        }
+    }
+
+    private func renewSnooze() async {
+        guard let client, snoozeOwnership.ownsASnooze, policy.pauseNotifications else { return }
+        do {
+            let live = try await client.snoozeState()
+            guard snoozeOwnership.stillOwns(live) else {
+                // Ended or changed by hand mid-call: theirs now, stop renewing (ADR-0013).
+                snoozeOwnership.recordEnded()
+                return
+            }
+            let set = try await client.setSnooze(minutes: StatusPolicy.snoozeSliceMinutes)
+            if let endtime = set.endsAt {
+                snoozeOwnership.recordStarted(endtime: endtime)
+                scheduleSnoozeRenewal()
+            } else {
+                snoozeOwnership.recordEnded()
+                note("Slack accepted a snooze renewal but reported no end time.", level: .warning)
+            }
+        } catch let error as SlackError {
+            // The current slice still runs out on its own, so a failed renewal degrades to
+            // "notifications come back a little early", said out loud.
+            snoozeOwnership.recordEnded()
+            reportSnoozeProblem(error)
+        } catch {
+            snoozeOwnership.recordEnded()
+            note(
+                "Could not renew the notification snooze; it will lapse on its own.",
+                level: .warning
+            )
+        }
+    }
+
+    private func releaseSnoozeIfOwned(using client: SlackClient) async {
+        // Cancel, then WAIT: an in-flight renewal past its cancellation check could otherwise
+        // mutate ownership between this function's guard and its own bookkeeping.
+        if let task = snoozeRenewalTask {
+            task.cancel()
+            await task.value
+            snoozeRenewalTask = nil
+        }
+        guard snoozeOwnership.ownsASnooze else { return }
+        do {
+            let live = try await client.snoozeState()
+            guard snoozeOwnership.stillOwns(live) else {
+                snoozeOwnership.recordEnded()
+                // A slice that ran out is not the user's doing — blame no hand that never moved.
+                if live.isSnoozing {
+                    note(
+                        "Your Do Not Disturb changed during the call — left it as it is.",
+                        level: .warning
+                    )
+                }
+                return
+            }
+            try await client.endSnooze()
+            snoozeOwnership.recordEnded()
+            note("Resumed Slack notifications.")
+        } catch let error as SlackError {
+            // Give up rather than retry: the slice expires by itself within minutes, which is
+            // the safety property the slicing bought (ADR-0013).
+            snoozeOwnership.recordEnded()
+            reportSnoozeProblem(error)
+        } catch {
+            snoozeOwnership.recordEnded()
+            note(
+                "Could not resume notifications; the snooze will lapse on its own.",
+                level: .warning
+            )
+        }
+    }
+
+    private func reportSnoozeProblem(_ error: SlackError) {
+        if case .api(code: "missing_scope") = error {
+            note(
+                "Pausing notifications needs new permissions — disconnect and reconnect Slack once.",
+                level: .warning
+            )
+            return
+        }
+        note(error.summary, level: .warning)
     }
 
     // MARK: - Timing

@@ -41,19 +41,61 @@ public struct SlackClient: Sendable {
         _ = try SlackWire.envelope(data, status: code, retryAfter: retryAfter)
     }
 
-    private func post(_ method: String, body: Data?) async throws -> (Data, Int, String?) {
+    // MARK: - Notifications (ADR-0013)
+
+    public func snoozeState() async throws -> SnoozeState {
+        let (data, code, retryAfter) = try await post("dnd.info", body: nil)
+        return try SlackWire.snoozeState(data, status: code, retryAfter: retryAfter)
+    }
+
+    /// Returns the state Slack reports back — its `snooze_endtime` is the fingerprint the
+    /// ownership rule compares against later (ADR-0013).
+    public func setSnooze(minutes: Int) async throws -> SnoozeState {
+        let (data, code, retryAfter) = try await post(
+            "dnd.setSnooze",
+            form: [("num_minutes", String(minutes))]
+        )
+        return try SlackWire.snoozeState(data, status: code, retryAfter: retryAfter)
+    }
+
+    public func endSnooze() async throws {
+        let (data, code, retryAfter) = try await post("dnd.endSnooze", body: nil)
+        do {
+            _ = try SlackWire.envelope(data, status: code, retryAfter: retryAfter)
+        } catch SlackError.api(code: "snooze_not_active") {
+            // The goal state, arrived at without us — the slice expired between the decision and
+            // the call. Not a failure.
+        }
+    }
+
+    private func post(
+        _ method: String,
+        form: [(String, String)]
+    ) async throws -> (Data, Int, String?) {
+        try await post(method, body: Data(SlackOAuth.formEncoded(form).utf8), contentType: .form)
+    }
+
+    private enum BodyType { case json, form }
+
+    private func post(
+        _ method: String,
+        body: Data?,
+        contentType: BodyType = .json
+    ) async throws -> (Data, Int, String?) {
         var request = URLRequest(url: baseURL.appendingPathComponent(method))
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        if let body {
+        // Bodiless calls still declare the form type: Slack answers `invalid_content_type` to a
+        // bare POST with none.
+        if contentType == .json, body != nil {
             request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-            request.httpBody = body
         } else {
             request.setValue(
                 "application/x-www-form-urlencoded; charset=utf-8",
                 forHTTPHeaderField: "Content-Type"
             )
         }
+        request.httpBody = body
 
         let data: Data
         let response: URLResponse

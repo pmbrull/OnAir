@@ -146,6 +146,48 @@ struct SlackWireTests {
         #expect(profile["status_text"] as? String == "")
     }
 
+    // MARK: - The snooze (ADR-0013)
+
+    @Test("a running snooze reads back with its endtime")
+    func snoozeReads() throws {
+        let state = try SlackWire.snoozeState(SlackResponseFixtures.dndInfoSnoozing, status: 200)
+        #expect(state == SnoozeState(isSnoozing: true, endsAt: 1_450_373_897))
+    }
+
+    /// The documented quirk the parser leans on: the snooze keys are absent when not snoozing —
+    /// unlike the profile, absence here genuinely means "off", not "schema changed".
+    @Test("absent snooze keys mean not snoozing")
+    func absentSnoozeKeysMeanOff() throws {
+        let state = try SlackWire.snoozeState(SlackResponseFixtures.dndInfoNotSnoozing, status: 200)
+        #expect(state == .off)
+    }
+
+    @Test("setSnooze's reply carries the endtime the ownership rule will compare")
+    func setSnoozeReads() throws {
+        let state = try SlackWire.snoozeState(SlackResponseFixtures.dndSetSnooze, status: 200)
+        #expect(state.isSnoozing)
+        #expect(state.endsAt == 1_450_373_897)
+    }
+
+    /// Snoozing with no endtime would corrupt the exact-match ownership rule, so it throws
+    /// rather than inventing a value.
+    @Test("snoozing with no endtime is malformed, not guessed")
+    func snoozeWithoutEndtime() {
+        #expect(throws: SlackError.malformedResponse("snooze_enabled with no snooze_endtime")) {
+            try SlackWire.snoozeState(
+                Data("{\"ok\":true,\"snooze_enabled\":true}".utf8),
+                status: 200
+            )
+        }
+    }
+
+    @Test("a refusal on dnd.info is an error, not 'not snoozing'")
+    func dndRefusalIsNotOff() {
+        #expect(throws: SlackError.api(code: "missing_scope")) {
+            try SlackWire.snoozeState(SlackResponseFixtures.error("missing_scope"), status: 200)
+        }
+    }
+
     // MARK: - Which failures need a human
 
     @Test("only the credential failures ask for a reconnect")

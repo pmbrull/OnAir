@@ -67,6 +67,24 @@ enum SlackResponseFixtures {
     "token_type":"bot","team":{"id":"T00000000","name":"Collate"}}
     """.utf8)
 
+    /// `dnd.info` while a snooze runs. Documentation-derived like everything here (GAP-0001);
+    /// the snooze_* keys are documented as present only during a snooze.
+    static let dndInfoSnoozing = Data("""
+    {"ok":true,"dnd_enabled":true,"next_dnd_start_ts":1450418400,"next_dnd_end_ts":1450454400,
+    "snooze_enabled":true,"snooze_endtime":1450373897,"snooze_remaining":1196}
+    """.utf8)
+
+    /// `dnd.info` with no snooze: the snooze_* keys are absent entirely, not false.
+    static let dndInfoNotSnoozing = Data("""
+    {"ok":true,"dnd_enabled":true,"next_dnd_start_ts":1450418400,"next_dnd_end_ts":1450454400}
+    """.utf8)
+
+    /// `dnd.setSnooze` success.
+    static let dndSetSnooze = Data("""
+    {"ok":true,"snooze_enabled":true,"snooze_endtime":1450373897,"snooze_remaining":60,
+    "snooze_is_indefinite":false}
+    """.utf8)
+
     static func error(_ code: String) -> Data {
         Data("{\"ok\":false,\"error\":\"\(code)\"}".utf8)
     }

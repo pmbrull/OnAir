@@ -70,9 +70,15 @@ public enum SlackOAuth {
         return plain.isEmpty ? nil : (plain, false)
     }
 
-    /// `read` is needed as well as `write`: OnAir has to see the status already there to decide
-    /// whether it may replace it, and to know what to put back afterwards (ADR-0008).
-    public static let userScopes = ["users.profile:read", "users.profile:write"]
+    /// Both pairs follow the same rule: `read` as well as `write`, because OnAir must see what is
+    /// there before it may touch it — the status to decide overwrite-and-restore (ADR-0008), the
+    /// snooze to tell the user's from its own (ADR-0013). This list is what a token is actually
+    /// granted; the manifest in the README merely permits it, and the two must agree or
+    /// reconnecting can never cure a missing_scope.
+    public static let userScopes = [
+        "users.profile:read", "users.profile:write",
+        "dnd:read", "dnd:write",
+    ]
 
     /// Fixed, because it has to match the Redirect URL registered in the Slack app. A port picked
     /// at random each launch could not be registered in advance.
