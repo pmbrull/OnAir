@@ -19,7 +19,7 @@ public enum SlackOAuth {
     /// This is the one line to edit when the shared app is registered. A source constant rather
     /// than a build flag: there is nothing secret about it, and a value that ships in the binary
     /// should be findable in the repo.
-    public static let builtInClientID = ""
+    public static let builtInClientID = "10227089686096.11799764021207"
 
     /// Which client id Connect would use, with its provenance — the app and `doctor` both render
     /// this, so there is exactly one copy of the precedence rule and it is testable (A3).

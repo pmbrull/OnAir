@@ -81,9 +81,9 @@ and drives a real TLS listener with `URLSession`.
 
 What is **not** verified against reality is Slack's side of the wire: the fixtures were written
 from documentation (GAP-0001), and the PKCE exchange — endpoint choice and token longevity — is
-built to the docs but unmeasured (GAP-0002). `SlackOAuth.builtInClientID` is empty until the
-shared Slack app is registered; Settings degrades to a one-field form meanwhile. `make doctor-slack`
-is the read-only live check.
+built to the docs but unmeasured (GAP-0002). The shared Slack app is registered and its id is baked
+into `SlackOAuth.builtInClientID`, so Settings is zero-field; the first live connect is what
+closes GAP-0002. `make doctor-slack` is the read-only live check.
 
 The one measured surprise so far is ADR-0011: the microphone reads *in use* permanently on a Mac
 running an audio mixer, which turned a planned default of "watch both" into "watch the camera, and

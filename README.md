@@ -163,7 +163,7 @@ recording every load-bearing choice and the alternative it beat.
 
 ## TODO
 
-- [ ] Register the shared OnAir Slack app (PKCE on) and fill `SlackOAuth.builtInClientID` (ADR-0012).
+- [x] Register the shared OnAir Slack app (PKCE on) and fill `SlackOAuth.builtInClientID` (ADR-0012).
 - [ ] Run the connect flow against a live workspace and capture real Slack responses (GAP-0001,
       GAP-0002 — including whether the token carries an expiry).
 - [ ] Decide whether screen sharing is worth a third signal.
