@@ -8,7 +8,14 @@ Authorize, and Settings has no fields.
 
 [This link](https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Flocalhost%3A51234%2Fcallback%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D)
 opens Slack's **Create an app** flow pre-filled with the manifest from the README. Pick the home
-workspace (yours — it only determines where the app is administered) → **Create**.
+workspace → **Create**.
+
+**Which workspace?** The home workspace only decides where the app is *administered* — never where
+it can be used, once distribution is on. Two sane choices: the workspace you will actually use
+OnAir in (simplest — and the home workspace needs no distribution step for itself, so §3 can wait
+until an outside workspace wants in), or a personal workspace you own, if the app should outlive
+your membership of the first one. Creating it inside a workspace does **not** bypass that
+workspace's admin approval for app installs.
 
 The manifest sets the two user scopes, the redirect URL, **PKCE on** and **token rotation off**.
 PKCE marks the app a public client — one-way, by design (ADR-0012).
