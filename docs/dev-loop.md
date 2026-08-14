@@ -86,7 +86,7 @@ is how you find out it applies to you.
 `make test` ends with a line naming the count:
 
 ```
-Test run with 112 tests in 12 suites passed after 2.9 seconds.
+Test run with 115 tests in 13 suites passed after 2.9 seconds.
 ```
 
 The **Device journey** suite disables itself when there is no capture hardware. A CI runner has

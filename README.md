@@ -173,7 +173,7 @@ it was found by running `doctor`, not by reasoning about it.
 
 ```bash
 make verify   # references + architecture invariants + format + lint + build + test
-make test     # 112 tests in 12 suites — use this, not `swift test`
+make test     # 115 tests in 13 suites — use this, not `swift test`
 ```
 
 `swift test` will not work on a machine with only the Command Line Tools: XCTest ships with Xcode,
@@ -192,7 +192,7 @@ recording every load-bearing choice and the alternative it beat.
 - [ ] Cut v0.1.0: certificate + notary profile + tap, then `make release`
       ([runbook](docs/runbooks/release.md), ADR-0017). Until it ships, the brew line above is the
       destination, not yet the reality — install from source meanwhile.
-- [ ] Pick a LICENSE before announcing it anywhere (no file today means all-rights-reserved).
+- [x] Pick a LICENSE — MIT, chosen for the warranty and liability disclaimer.
 - [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
       carries an expiry (GAP-0001, GAP-0002).
 - [ ] Decide whether screen sharing is worth a third signal.

@@ -21,6 +21,20 @@ public enum LoopbackIdentity {
         case toolFailed(command: String, status: Int32, stderr: String)
         case importFailed(OSStatus)
         case noIdentityInArchive
+
+        /// See `LoopbackReceiver.Failure.summary` — same rule, same reason.
+        public var summary: String {
+            switch self {
+            case let .toolMissing(path):
+                "\(path) is missing, so the loopback certificate cannot be created."
+            case let .toolFailed(command, status, stderr):
+                "\(command) exited \(status): \(stderr.trimmingCharacters(in: .whitespacesAndNewlines))"
+            case let .importFailed(status):
+                "The loopback certificate could not be read back (OSStatus \(status))."
+            case .noIdentityInArchive:
+                "The loopback certificate archive held no identity."
+            }
+        }
     }
 
     /// Not a secret, and deliberately so. It protects a key whose only job is to authenticate
@@ -117,7 +131,9 @@ public enum LoopbackIdentity {
             throw Failure.toolFailed(
                 command: "openssl \(arguments.first ?? "")",
                 status: process.terminationStatus,
-                stderr: String(decoding: stderr, as: UTF8.self)
+                // A diagnostic, so an unreadable one still has to say something — but it says
+                // *that* it was unreadable rather than quietly rendering as replacement glyphs.
+                stderr: String(bytes: stderr, encoding: .utf8) ?? "<non-UTF-8 output from openssl>"
             )
         }
     }

@@ -149,6 +149,14 @@ struct SlackOAuthTests {
     func emptyItemIsNil() {
         #expect(SlackOAuth.parseStoredClientID(Data()) == nil)
     }
+
+    /// `0xFF` cannot begin a UTF-8 sequence. A lenient decode would turn this into "\u{FFFD}" and
+    /// hand back a client id made of replacement characters — a value invented to fill a hole,
+    /// which is the one thing `.claude/rules/no-silent-fallbacks.md` forbids outright.
+    @Test("bytes that are not UTF-8 are nil, not a string of replacement characters")
+    func invalidUTF8IsNil() {
+        #expect(SlackOAuth.parseStoredClientID(Data([0xFF, 0xFE, 0xFF])) == nil)
+    }
 }
 
 /// RFC 7636. The vector in appendix B is the one fixed point the whole exchange turns on: get the

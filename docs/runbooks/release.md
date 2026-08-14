@@ -94,9 +94,9 @@ then.
 
 ## 4. One-time — things that are not build steps
 
-- **A LICENSE file.** The repo ships none, which legally means all-rights-reserved — fine for a
-  private repo, wrong for one people install from. Picking it is an ownership call, not an agent
-  call; MIT is the default suggestion for a tool like this.
+- **A LICENSE file.** Done — MIT, at the repo root. Chosen for the half that matters to a tool
+  people install from a tap: the AS-IS warranty disclaimer and the liability cap. It also grants
+  source rights, which was the accepted trade rather than an oversight.
 - **Slack-side distribution.** Confirm the shared app has **Activate Public Distribution** done
   ([shared-app runbook §3](shared-app.md)) — without it, every workspace except the app's home
   fails to connect with `invalid_team_for_non_distributed_app`. The app registration itself never

@@ -25,7 +25,11 @@ enum TokenStore {
 
     static func token() -> String? {
         guard let data = read(account: Account.token) else { return nil }
-        return String(decoding: data, as: UTF8.self)
+        // Failable rather than `String(decoding:)`: bytes that are not UTF-8 are not a token, and
+        // substituting U+FFFD would hand Slack a plausible-looking string whose only possible
+        // outcome is an authentication failure nothing on screen explains. `nil` reads as "no
+        // token", which is the state that sends the user to Connect.
+        return String(bytes: data, encoding: .utf8)
     }
 
     static func saveToken(_ token: String) throws {
