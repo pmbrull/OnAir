@@ -5,6 +5,7 @@ CONFIG ?= debug
 
 ## Read from the plist rather than repeated here, so the two cannot drift.
 BUNDLE_ID := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" Resources/Info.plist 2>/dev/null)
+VERSION := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist 2>/dev/null)
 
 ## OnAir needs no TCC grant, so signing is not load-bearing for permissions the way it is in an
 ## app that captures. It still matters for `SMAppService` (launch at login), which refuses to
@@ -28,7 +29,12 @@ TEST_FLAGS ?= $(shell if ! xcrun -f xctest >/dev/null 2>&1 && [ -d "$(CLT_FRAMEW
     "$(CLT_FRAMEWORKS)" "$(CLT_FRAMEWORKS)" "$(CLT_LIB)"; fi)
 
 .PHONY: help verify build test fmt fmt-check lint arch references hooks doctor doctor-slack \
-        app run install uninstall clean
+        app run install uninstall clean icon dist notarize release
+
+## The release lane's targets write and then read the same artefacts; running them interleaved
+## under -j would zip a bundle mid-signature. Nothing here benefits from parallel make anyway —
+## the expensive steps are single swift builds with their own internal parallelism.
+.NOTPARALLEL:
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -49,7 +55,7 @@ hooks: ## Install the pre-commit hooks
 	@echo "hooks installed; run 'pre-commit run --all-files' to check the whole tree"
 
 build: ## Compile every target
-	swift build
+	swift build -c $(CONFIG)
 
 test: ## Run the test suite
 	swift test $(TEST_FLAGS)
@@ -104,6 +110,7 @@ app: build ## Assemble OnAir.app
 	@mkdir -p "$(BUNDLE)/Contents/MacOS" "$(BUNDLE)/Contents/Resources"
 	@cp .build/$(CONFIG)/OnAir "$(BUNDLE)/Contents/MacOS/$(APP_NAME)"
 	@cp Resources/Info.plist "$(BUNDLE)/Contents/Info.plist"
+	@cp Resources/AppIcon.icns "$(BUNDLE)/Contents/Resources/AppIcon.icns"
 	@printf 'APPL????' > "$(BUNDLE)/Contents/PkgInfo"
 	@if [ -n "$(CODESIGN_ID)" ]; then \
 	  codesign --force --deep --sign "$(CODESIGN_ID)" "$(BUNDLE)" >/dev/null 2>&1 && \
@@ -118,6 +125,84 @@ app: build ## Assemble OnAir.app
 
 run: app ## Build and launch the app
 	@open "$(BUNDLE)"
+
+icon: ## Regenerate Resources/AppIcon.icns from scripts/make-icon.swift
+	@./scripts/make-icon.sh
+
+## ---- The release lane (ADR-0016; the walkthrough is docs/runbooks/release.md) ---------------
+##
+## `dist` refuses to run without a Developer ID Application identity: an ad-hoc or Apple
+## Development signature would pass here and then be refused by Gatekeeper on every other Mac,
+## which is a silent fallback by another name. To exercise the lane on a machine without the
+## certificate: `make dist DIST_SIGN_ID=-` (ad-hoc; --timestamp is dropped because Apple's
+## timestamp service refuses ad-hoc signatures).
+##
+## Two `--triple` builds and a `lipo`, not `--arch arm64 --arch x86_64`: the dual-arch flag
+## drives XCBuild, which ships with Xcode and not with the Command Line Tools — measured here
+## 2026-08-14 ("xcbuild executable ... does not exist").
+
+DIST_DIR := .build/dist
+DIST_BUNDLE := $(DIST_DIR)/$(APP_NAME).app
+DIST_ZIP := $(DIST_DIR)/$(APP_NAME)-$(VERSION).zip
+NOTARY_PROFILE ?= onair-notary
+DIST_SIGN_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
+  | grep -oE '"Developer ID Application:[^"]*"' | head -1 | tr -d '"')
+## `=`, not `:=` — deferred, so only the dist lane pays for the `security` shell-out. And
+## `$(subst)` rather than `$(filter -,...)`, which is a word-list match that would also hit an
+## identity whose name contains a lone "-" token and silently drop the timestamp.
+DIST_TIMESTAMP = $(if $(subst -,,$(DIST_SIGN_ID)),--timestamp,)
+
+## The version guard is load-bearing twice over: an unreadable plist would otherwise produce a
+## quietly mislabelled "OnAir-.zip", and $(VERSION) is substituted into recipe text this shell
+## executes — X.Y.Z-only means it can never carry shell (or, downstream in the cask, Ruby).
+dist: ## Build, sign (hardened runtime) and zip the universal release artefact
+	@printf '%s' "$(VERSION)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$' || { \
+	  echo "error: CFBundleShortVersionString from Resources/Info.plist is '$(VERSION)', not X.Y.Z."; \
+	  echo "       The version names the zip, the tag and the cask; refusing a mislabelled artefact."; \
+	  exit 1; \
+	}
+	@if [ -z "$(DIST_SIGN_ID)" ]; then \
+	  echo "error: no 'Developer ID Application' identity in the keychain."; \
+	  echo "       A release must be Developer-ID signed (ADR-0016) — docs/runbooks/release.md §1."; \
+	  echo "       To exercise the lane without the certificate: make dist DIST_SIGN_ID=-"; \
+	  exit 1; \
+	fi
+	swift build -c release --triple arm64-apple-macosx
+	swift build -c release --triple x86_64-apple-macosx
+	@rm -rf "$(DIST_DIR)"
+	@mkdir -p "$(DIST_BUNDLE)/Contents/MacOS" "$(DIST_BUNDLE)/Contents/Resources"
+	@lipo -create .build/arm64-apple-macosx/release/OnAir .build/x86_64-apple-macosx/release/OnAir \
+	  -output "$(DIST_BUNDLE)/Contents/MacOS/$(APP_NAME)"
+	@cp Resources/Info.plist "$(DIST_BUNDLE)/Contents/Info.plist"
+	@cp Resources/AppIcon.icns "$(DIST_BUNDLE)/Contents/Resources/AppIcon.icns"
+	@printf 'APPL????' > "$(DIST_BUNDLE)/Contents/PkgInfo"
+	codesign --force --options runtime $(DIST_TIMESTAMP) --sign "$(DIST_SIGN_ID)" "$(DIST_BUNDLE)"
+	@ditto -c -k --keepParent "$(DIST_BUNDLE)" "$(DIST_ZIP)"
+	@cd "$(DIST_DIR)" && shasum -a 256 "$(notdir $(DIST_ZIP))" > "$(notdir $(DIST_ZIP)).sha256"
+	@printf 'archs: ' && lipo -archs "$(DIST_BUNDLE)/Contents/MacOS/$(APP_NAME)"
+	@echo "built $(DIST_ZIP) (v$(VERSION), signed as '$(DIST_SIGN_ID)')"
+
+## Assessment runs BEFORE the re-zip: a failed spctl verdict must abort while the stale zip on
+## disk is still visibly pre-staple, not after a fresh, publishable-looking zip and checksum
+## have already been written.
+notarize: ## Submit the dist zip to Apple, staple the bundle, assess, re-zip and re-checksum
+	@[ -f "$(DIST_ZIP)" ] || { echo "error: $(DIST_ZIP) not found — run 'make dist' first"; exit 1; }
+	xcrun notarytool submit "$(DIST_ZIP)" --keychain-profile "$(NOTARY_PROFILE)" --wait
+	xcrun stapler staple "$(DIST_BUNDLE)"
+	spctl --assess --type exec -vv "$(DIST_BUNDLE)"
+	@ditto -c -k --keepParent "$(DIST_BUNDLE)" "$(DIST_ZIP)"
+	@cd "$(DIST_DIR)" && shasum -a 256 "$(notdir $(DIST_ZIP))" > "$(notdir $(DIST_ZIP)).sha256"
+	@echo "notarized and stapled; the artefact to publish is $(DIST_ZIP)"
+
+release: dist notarize ## The whole lane, then the publish steps to run next
+	@echo
+	@echo "Artefact ready: $(DIST_ZIP)"
+	@echo "  sha256: $$(cut -d' ' -f1 < '$(DIST_ZIP).sha256')"
+	@echo
+	@echo "Next (docs/runbooks/release.md §5):"
+	@echo "  git tag v$(VERSION) && git push origin v$(VERSION)"
+	@echo "  gh release create v$(VERSION) '$(DIST_ZIP)' --title 'OnAir $(VERSION)'"
+	@echo "  ./scripts/make-cask.sh   # paste the output into pmbrull/homebrew-tap"
 
 install: app ## Copy the bundle into /Applications
 	@rm -rf "/Applications/$(APP_NAME).app"
@@ -138,4 +223,4 @@ uninstall: ## Remove the app, its Keychain items and its application-support dir
 
 clean: ## Remove build products
 	swift package clean
-	@rm -rf "$(BUNDLE)"
+	@rm -rf "$(BUNDLE)" "$(DIST_DIR)"

@@ -1,7 +1,8 @@
 # Runbook — first run
 
-Getting from a fresh clone to a status that changes itself. This is the **user** runbook; the
-maintainer's one-time counterpart is [`shared-app.md`](shared-app.md).
+Getting from an install — brew or a fresh clone — to a status that changes itself. This is the
+**user** runbook; the maintainer's counterparts are [`shared-app.md`](shared-app.md) (the Slack
+app, once ever) and [`release.md`](release.md) (each release).
 
 Who does what, and how often:
 
@@ -16,7 +17,16 @@ the app to your workspace. **Never press "Install to Workspace" in Slack's dashb
 app; that flow sends no user scopes and fails with "No scopes requested" (see
 [`shared-app.md`](shared-app.md) §2).
 
-## 1. Build and install
+## 1. Install
+
+Homebrew, once v0.1.0 is published (the README's TODO tracks it — until then, source):
+
+```bash
+brew install --cask pmbrull/tap/onair
+open -a OnAir
+```
+
+Or from source, with a Swift 6 toolchain:
 
 ```bash
 make install

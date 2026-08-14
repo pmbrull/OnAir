@@ -40,9 +40,10 @@ on the app.
 | `SlackKit` | library | `SlackClient` (six calls: profile read/write, identity, three DND), `SlackWire` (decoding), and the OAuth loopback: `SlackOAuth`, `PKCE`, `LoopbackReceiver`, `LoopbackIdentity` | Foundation, Network, Security, CryptoKit, StatusKit |
 | `OnAir` | executable | Menu bar, Settings, `TokenStore`, `PolicyStore`, `LaunchAtLogin`, `AppCoordinator`, `Doctor` | everything above + AppKit, SwiftUI, ServiceManagement |
 
-`Sources/StatusKit/EmojiTable.swift` is the only generated file in the tree: 1913 shortcode → glyph
-pairs vendored from a pinned tag of github/gemoji by `scripts/generate-emoji-table.sh` and
-committed, never fetched at build or run time (ADR-0014, ADR-0004). Regenerate it; do not edit it.
+Two files in the tree are generated, committed, and never fetched at build or run time (ADR-0004):
+`Sources/StatusKit/EmojiTable.swift`, 1913 shortcode → glyph pairs vendored from a pinned tag of
+github/gemoji by `scripts/generate-emoji-table.sh` (ADR-0014); and `Resources/AppIcon.icns`, drawn
+by `scripts/make-icon.swift` via `make icon`. Regenerate them; do not edit them.
 
 ## Invariants
 

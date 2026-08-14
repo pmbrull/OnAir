@@ -82,6 +82,10 @@ jobs:
         run: |
           plutil -lint .build/OnAir.app/Contents/Info.plist
           /usr/libexec/PlistBuddy -c "Print :LSUIElement" .build/OnAir.app/Contents/Info.plist
+          # The icon must exist AND be named: `make app` fails if the icns is missing, but nothing
+          # else notices a deleted CFBundleIconFile — the app would ship iconless, silently.
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" .build/OnAir.app/Contents/Info.plist
+          test -f .build/OnAir.app/Contents/Resources/AppIcon.icns
           # A5 in the shipped artefact, not just in the sources: a usage-description key would mean
           # something started capturing.
           if /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" \

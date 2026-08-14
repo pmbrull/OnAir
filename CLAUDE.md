@@ -32,6 +32,8 @@ make doctor-slack  # as doctor, plus one read-only Slack round trip
 make test          # the suite (see below — not `swift test`)
 make app           # assemble .build/OnAir.app
 make run           # build and launch
+make icon          # regenerate Resources/AppIcon.icns from scripts/make-icon.swift
+make release       # dist (signed universal zip) + notarize — docs/runbooks/release.md
 make uninstall     # remove the app, its Keychain items and its support directory
 ```
 
@@ -90,6 +92,12 @@ written from exactly one place. Still unmeasured: the fixtures are prose rather 
 (GAP-0001), the empty-status and error shapes are untouched, and token longevity needs thirty days
 or an `expires_in` in a captured exchange (GAP-0002). `make doctor-slack` is the read-only live
 check.
+
+The release lane (ADR-0016) is built and exercised up to Apple's door — `make dist DIST_SIGN_ID=-`
+runs everything short of the notary — but no release has been cut: the keychain holds no Developer
+ID certificate yet, so notarization, the tap and `brew install` are unmeasured until v0.1.0 ships.
+`docs/runbooks/release.md` pins that first release as the measurement point; until then the
+README's brew line is the destination, not the reality.
 
 Two things reality has corrected so far, and both were seen rather than reasoned. **ADR-0011**: the
 microphone reads *in use* permanently on a Mac running an audio mixer, which turned a planned

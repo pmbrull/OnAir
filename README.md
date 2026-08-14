@@ -27,12 +27,18 @@ fails the build, not by a promise: see [invariant A5](ARCHITECTURE.md#invariants
 ## Install
 
 ```bash
-git clone git@github.com:pmbrull/SlackStatus.git && cd SlackStatus
-make install && open /Applications/OnAir.app
+brew install --cask pmbrull/tap/onair
 ```
 
-Requires macOS 15+ and a Swift 6 toolchain. No dependencies to fetch — there are none
-([ADR-0004](docs/decisions/0004-no-third-party-dependencies.md)).
+Signed, notarized, universal (Apple Silicon + Intel), macOS 15+. **Ships with v0.1.0** — until
+that release lands (the TODO below tracks it), build from source instead. Or build from source — requires
+a Swift 6 toolchain, and no dependencies to fetch because there are none
+([ADR-0004](docs/decisions/0004-no-third-party-dependencies.md)):
+
+```bash
+git clone git@github.com:pmbrull/OnAir.git && cd OnAir
+make install && open /Applications/OnAir.app
+```
 
 Then press **Connect to Slack** in Settings and approve in the browser — that is the whole setup.
 OnAir is a public client ([ADR-0012](docs/decisions/0012-a-public-client-pkce-and-no-secret-anywhere.md)):
@@ -175,7 +181,7 @@ so the suite is written against Swift Testing and `make test` supplies the searc
 not. [`docs/dev-loop.md`](docs/dev-loop.md) has the details.
 
 The repo carries its own working agreement — [`CLAUDE.md`](CLAUDE.md),
-[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with fifteen ADRs
+[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with sixteen ADRs
 recording every load-bearing choice and the alternative it beat.
 
 ## TODO
@@ -183,6 +189,10 @@ recording every load-bearing choice and the alternative it beat.
 - [x] Register the shared OnAir Slack app (PKCE on) and fill `SlackOAuth.builtInClientID` (ADR-0012).
 - [x] Run the connect flow against a live workspace — `oauth.v2.access` accepted the PKCE exchange,
       and `make doctor-slack` came back with a real profile (GAP-0002).
+- [ ] Cut v0.1.0: certificate + notary profile + tap, then `make release`
+      ([runbook](docs/runbooks/release.md), ADR-0016). Until it ships, the brew line above is the
+      destination, not yet the reality — install from source meanwhile.
+- [ ] Pick a LICENSE before announcing it anywhere (no file today means all-rights-reserved).
 - [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
       carries an expiry (GAP-0001, GAP-0002).
 - [ ] Decide whether screen sharing is worth a third signal.
