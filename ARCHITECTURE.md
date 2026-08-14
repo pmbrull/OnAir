@@ -77,8 +77,18 @@ and `CMIODeviceStartStream` are build failures anywhere in `Sources/`, and an
 bundle's plist, because this property has to hold in the shipped artefact and not only in the
 sources. It is the whole reason OnAir needs no permission (ADR-0001).
 
-A1, A2, A4 and A5 are decided by `./scripts/check-architecture.sh`, which runs in `make verify`, in
-the pre-commit hooks, and in CI. A3 is decided by `architecture-reviewer`.
+**A6 — The loopback key never touches a keychain.** `SecPKCS12Import` must pass
+`kSecImportToMemoryOnly`; without it, macOS imports the certificate *and its private key* into the
+login keychain on every distinct archive, and each deposited key's ACL names the binary that
+imported it — so a rebuilt OnAir makes macOS ask the user for their login password. Measured before
+the fix: 268 stranded keys on one machine, most of them minted by `make verify` itself. This is the
+mirror of A4 rather than an exception to it: A4 puts the *token* in the Keychain and nowhere else;
+A6 keeps the loopback key in process memory and nowhere else, because it is not a credential — its
+passphrase is a constant in the source, and its only job is to authenticate `localhost` to this
+machine's own browser for the seconds a callback is in flight (ADR-0005, ADR-0016).
+
+A1, A2, A4, A5 and A6 are decided by `./scripts/check-architecture.sh`, which runs in `make verify`,
+in the pre-commit hooks, and in CI. A3 is decided by `architecture-reviewer`.
 
 ## Data flow, one meeting
 

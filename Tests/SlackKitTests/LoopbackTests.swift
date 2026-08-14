@@ -33,6 +33,48 @@ struct LoopbackTests {
         #expect(try certificateData(of: first) == certificateData(of: second))
     }
 
+    /// The regression that cost a user 268 private keys and a password prompt a week.
+    ///
+    /// `SecPKCS12Import` on macOS imports into the *default* keychain unless told not to, so the
+    /// obvious way to turn a PKCS#12 into a `SecIdentity` silently deposits a certificate and its
+    /// private key in the login keychain — once per *distinct* archive, since re-importing the same
+    /// one is suppressed as a duplicate. This suite mints a fresh archive per test, so the gate
+    /// itself was the biggest polluter. Each deposited key carries an ACL naming the process that
+    /// imported it, and a rebuilt binary is a different process, so macOS ends up asking the user
+    /// for their login password on OnAir's behalf. Invariant A6, ADR-0016.
+    ///
+    /// Attributes only, never `kSecReturnRef` or `kSecReturnData` on a key: asking for key material
+    /// is the thing that raises the prompt this test exists to prevent.
+    @Test("loading an identity leaves nothing behind in the login keychain")
+    func importLeavesNoKeychainResidue() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let before = keychainResidue()
+        // Twice, because minting and re-reading the archive are different paths through
+        // `loadOrCreate` and only the first used to move the counts — one fresh archive, one
+        // deposit. A single call would still catch the regression; two say which path it was.
+        _ = try LoopbackIdentity.loadOrCreate(in: directory)
+        _ = try LoopbackIdentity.loadOrCreate(in: directory)
+        let after = keychainResidue()
+
+        // Named per class rather than compared as a pair, so a failure says which one leaked.
+        #expect(
+            after.privateKeys == before.privateKeys,
+            """
+            two calls added \(after.privateKeys - before.privateKeys) private key(s) to the login \
+            keychain; pass kSecImportToMemoryOnly to SecPKCS12Import (A6, ADR-0016)
+            """
+        )
+        #expect(
+            after.localhostCertificates == before.localhostCertificates,
+            """
+            two calls added \(after.localhostCertificates - before.localhostCertificates) \
+            localhost certificate(s) to the login keychain (A6, ADR-0016)
+            """
+        )
+    }
+
     @Test("a corrupt archive is replaced rather than fatal")
     func corruptArchiveIsReplaced() throws {
         let directory = try makeDirectory()
@@ -205,4 +247,35 @@ private func subjectSummary(of identity: SecIdentity) throws -> String? {
     var certificate: SecCertificate?
     SecIdentityCopyCertificate(identity, &certificate)
     return try SecCertificateCopySubjectSummary(#require(certificate)) as String?
+}
+
+/// What the login keychain holds of the kind a PKCS#12 import would add.
+///
+/// A count rather than a set of identifiers, because the assertion is a *delta across one call* —
+/// what matters is that the number did not move, not which items are there. A machine that already
+/// has its own `localhost` certificate simply starts from a higher baseline.
+private func keychainResidue() -> (privateKeys: Int, localhostCertificates: Int) {
+    (matches([
+        kSecClass as String: kSecClassKey,
+        kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+    ]), matches([
+        kSecClass as String: kSecClassCertificate,
+        kSecAttrLabel as String: "localhost",
+    ]))
+}
+
+private func matches(_ query: [String: Any]) -> Int {
+    var query = query
+    query[kSecMatchLimit as String] = kSecMatchLimitAll
+    query[kSecReturnAttributes as String] = true
+    var result: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+    // `errSecItemNotFound` is a real answer — none — and the only other expected status. Anything
+    // else means the query itself failed, and reporting that as 0 would make the delta look clean
+    // (`.claude/rules/no-silent-fallbacks.md`); -1 makes it fail loudly instead.
+    if status == errSecItemNotFound {
+        return 0
+    }
+    guard status == errSecSuccess, let items = result as? [[String: Any]] else { return -1 }
+    return items.count
 }

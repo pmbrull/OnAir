@@ -20,6 +20,7 @@ outlives its plan gets a record here; a question with no answer gets a [gap](../
 | [0013](0013-pause-notifications-in-self-renewing-slices.md) | Pause notifications in self-renewing slices |
 | [0014](0014-render-shortcodes-from-a-vendored-table.md) | Render shortcodes from a vendored table |
 | [0015](0015-carry-the-previous-status-expiry.md) | Carry the previous status's expiry across a restore |
+| [0016](0016-the-loopback-key-never-touches-a-keychain.md) | The loopback key never touches a keychain |
 
 ## Format
 

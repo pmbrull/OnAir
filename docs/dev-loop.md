@@ -5,14 +5,15 @@ How to build, run and exercise OnAir, and what a healthy result looks like.
 ## Commands
 
 ```bash
-make verify        # the gate: references + arch + fmt-check + lint + build + test
-make doctor        # everything the app does, minus the window — against this Mac's real hardware
-make doctor-slack  # as doctor, plus one read-only Slack round trip
-make test          # the suite
-make app           # assemble .build/OnAir.app
-make run           # build and launch
-make install       # copy to /Applications
-make uninstall     # remove the app, its Keychain items and its support directory
+make verify         # the gate: references + arch + fmt-check + lint + build + test
+make doctor         # everything the app does, minus the window — against this Mac's real hardware
+make doctor-slack   # as doctor, plus one read-only Slack round trip
+make test           # the suite
+make app            # assemble .build/OnAir.app
+make run            # build and launch
+make install        # copy to /Applications
+make purge-loopback # list the loopback keys stranded in the login keychain before ADR-0016
+make uninstall      # remove the app, its Keychain items and its support directory
 ```
 
 ## The toolchain quirk you will hit first
@@ -81,7 +82,7 @@ is how you find out it applies to you.
 `make test` ends with a line naming the count:
 
 ```
-Test run with 111 tests in 12 suites passed after 2.9 seconds.
+Test run with 112 tests in 12 suites passed after 2.9 seconds.
 ```
 
 The **Device journey** suite disables itself when there is no capture hardware. A CI runner has
@@ -122,7 +123,7 @@ adds emoji:
 
 ```bash
 ./scripts/generate-emoji-table.sh   # rewrites the file; commit the result
-make test                           # EmojiShortcodeTests re-checks the pack pair by pair
+make test           # EmojiShortcodeTests re-checks the pack pair by pair
 ```
 
 The generator refuses rather than skips when an entry is not the shape it expects — the output
@@ -144,3 +145,11 @@ The loopback certificate lives at `~/Library/Application Support/OnAir/loopback.
 Keychain items under `io.umamidata.onair` — the user token, plus a client id override if you
 pasted one (ADR-0012). `make uninstall` removes the certificate and both Keychain accounts;
 deleting the bundle alone leaves a live Slack token behind.
+
+**If you ran the gate before ADR-0016, you have more residue than that.** `SecPKCS12Import` on
+macOS imports into the login keychain unless told not to, so every `make verify` used to leave a
+`CN=localhost, O=OnAir` certificate and its private key there permanently — 268 of them on the
+machine where this was found, four unrelated keys on the same machine for comparison. Those keys
+are why macOS started asking for the login password on OnAir's behalf. `make purge-loopback` lists
+them and `./scripts/purge-loopback-keychain.sh --apply` removes them; `make uninstall` applies it
+too. New ones are no longer created, and invariant A6 fails the build if that changes.

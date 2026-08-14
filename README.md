@@ -167,7 +167,7 @@ it was found by running `doctor`, not by reasoning about it.
 
 ```bash
 make verify   # references + architecture invariants + format + lint + build + test
-make test     # 111 tests in 12 suites — use this, not `swift test`
+make test     # 112 tests in 12 suites — use this, not `swift test`
 ```
 
 `swift test` will not work on a machine with only the Command Line Tools: XCTest ships with Xcode,
