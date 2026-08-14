@@ -5,42 +5,6 @@ import Observation
 import SlackKit
 import StatusKit
 
-/// The one place the Keychain override meets the kit's precedence rule. The rule itself lives in
-/// `SlackOAuth.resolveClientID`, where it is tested (A3); this is only the join.
-func resolvedClientID() -> SlackOAuth.ClientIDSource? {
-    SlackOAuth.resolveClientID(override: TokenStore.clientIDOverride())
-}
-
-/// How OnAir stands with Slack right now.
-enum ConnectionState: Equatable {
-    /// No built-in client id in this build and none pasted — Connect has nothing to authorise
-    /// against.
-    case notConfigured
-    /// A client id to authorise with, but no token: the user has not pressed Connect.
-    case disconnected
-    case connecting
-    case connected(SlackIdentity)
-    /// A token that Slack will not accept. Retrying will not help.
-    case needsReconnect(String)
-
-    var isConnected: Bool {
-        if case .connected = self {
-            return true
-        }
-        return false
-    }
-}
-
-/// One line in the menu's short history. The app's answer to "why is my status like this".
-struct ActivityEntry: Identifiable, Equatable {
-    enum Level: Equatable { case info, warning, failure }
-
-    let id = UUID()
-    let at: Date
-    let level: Level
-    let message: String
-}
-
 /// Everything joined up: the hardware, the policy, and Slack.
 ///
 /// The coordinator performs; it does not decide. Every "should we?" belongs to `StatusEngine`
@@ -65,13 +29,18 @@ final class AppCoordinator {
 
     @ObservationIgnored private var engine = StatusEngine()
     @ObservationIgnored private let watcher = DeviceWatcher()
-    @ObservationIgnored private var client: SlackClient?
     @ObservationIgnored private var wakeTask: Task<Void, Never>?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
     @ObservationIgnored private var pumpAgain = false
     @ObservationIgnored private var retryDelay: TimeInterval = AppCoordinator.minimumRetry
-    @ObservationIgnored private var snoozeOwnership = SnoozeOwnership()
-    @ObservationIgnored private var snoozeRenewalTask: Task<Void, Never>?
+
+    // Internal rather than private only because `AppCoordinator+Notifications.swift` is a separate
+    // file, and Swift's `private` does not reach across one. Nothing outside the coordinator may
+    // touch these: the snooze bookkeeping is the difference between handing back a Do Not Disturb
+    // OnAir started and stamping on one the user set by hand (ADR-0013).
+    @ObservationIgnored var client: SlackClient?
+    @ObservationIgnored var snoozeOwnership = SnoozeOwnership()
+    @ObservationIgnored var snoozeRenewalTask: Task<Void, Never>?
 
     private static let minimumRetry: TimeInterval = 15
     private static let maximumRetry: TimeInterval = 300
@@ -188,13 +157,13 @@ final class AppCoordinator {
             reloadClient()
         } catch let error as LoopbackReceiver.Failure {
             connection = .disconnected
-            note(Self.describe(error), level: .failure)
+            note(error.summary, level: .failure)
         } catch let error as SlackError {
             connection = .disconnected
             note(error.summary, level: .failure)
         } catch let error as LoopbackIdentity.Failure {
             connection = .disconnected
-            note(Self.describe(error), level: .failure)
+            note(error.summary, level: .failure)
         } catch {
             connection = .disconnected
             note("Could not complete the Slack connection.", level: .failure)
@@ -384,130 +353,6 @@ final class AppCoordinator {
         }
     }
 
-    // MARK: - Notifications (ADR-0013)
-
-    /// Snooze failures deliberately never throw into the status path: the status is the primary
-    /// job, and a broken snooze — most likely `missing_scope` on a pre-ADR-0013 connection — must
-    /// not make the engine retry a status write that already succeeded.
-    private func beginSnoozeIfWanted(using client: SlackClient) async {
-        guard policy.pauseNotifications, !snoozeOwnership.ownsASnooze else { return }
-        do {
-            let live = try await client.snoozeState()
-            guard policy.snoozeVerdict(forLive: live) == .start else {
-                note(
-                    "Left Do Not Disturb alone — you already have a snooze running.",
-                    level: .warning
-                )
-                return
-            }
-            let set = try await client.setSnooze(minutes: StatusPolicy.snoozeSliceMinutes)
-            guard let endtime = set.endsAt else {
-                note("Slack accepted the snooze but reported no end time.", level: .warning)
-                return
-            }
-            snoozeOwnership.recordStarted(endtime: endtime)
-            note("Paused Slack notifications.")
-            scheduleSnoozeRenewal()
-        } catch let error as SlackError {
-            reportSnoozeProblem(error)
-        } catch {
-            note("Could not pause notifications.", level: .warning)
-        }
-    }
-
-    /// Each slice is renewed shortly before it lapses, for as long as OnAir still owns the
-    /// snooze. Slices rather than one long snooze so a crash self-heals within
-    /// `snoozeSliceMinutes` — the opposite trade to the status (ADR-0009 vs ADR-0013).
-    private func scheduleSnoozeRenewal() {
-        snoozeRenewalTask?.cancel()
-        snoozeRenewalTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(StatusPolicy.snoozeRenewalDelay))
-            guard !Task.isCancelled else { return }
-            await renewSnooze()
-        }
-    }
-
-    private func renewSnooze() async {
-        guard let client, snoozeOwnership.ownsASnooze, policy.pauseNotifications else { return }
-        do {
-            let live = try await client.snoozeState()
-            guard snoozeOwnership.stillOwns(live) else {
-                // Ended or changed by hand mid-call: theirs now, stop renewing (ADR-0013).
-                snoozeOwnership.recordEnded()
-                return
-            }
-            let set = try await client.setSnooze(minutes: StatusPolicy.snoozeSliceMinutes)
-            if let endtime = set.endsAt {
-                snoozeOwnership.recordStarted(endtime: endtime)
-                scheduleSnoozeRenewal()
-            } else {
-                snoozeOwnership.recordEnded()
-                note("Slack accepted a snooze renewal but reported no end time.", level: .warning)
-            }
-        } catch let error as SlackError {
-            // The current slice still runs out on its own, so a failed renewal degrades to
-            // "notifications come back a little early", said out loud.
-            snoozeOwnership.recordEnded()
-            reportSnoozeProblem(error)
-        } catch {
-            snoozeOwnership.recordEnded()
-            note(
-                "Could not renew the notification snooze; it will lapse on its own.",
-                level: .warning
-            )
-        }
-    }
-
-    private func releaseSnoozeIfOwned(using client: SlackClient) async {
-        // Cancel, then WAIT: an in-flight renewal past its cancellation check could otherwise
-        // mutate ownership between this function's guard and its own bookkeeping.
-        if let task = snoozeRenewalTask {
-            task.cancel()
-            await task.value
-            snoozeRenewalTask = nil
-        }
-        guard snoozeOwnership.ownsASnooze else { return }
-        do {
-            let live = try await client.snoozeState()
-            guard snoozeOwnership.stillOwns(live) else {
-                snoozeOwnership.recordEnded()
-                // A slice that ran out is not the user's doing — blame no hand that never moved.
-                if live.isSnoozing {
-                    note(
-                        "Your Do Not Disturb changed during the call — left it as it is.",
-                        level: .warning
-                    )
-                }
-                return
-            }
-            try await client.endSnooze()
-            snoozeOwnership.recordEnded()
-            note("Resumed Slack notifications.")
-        } catch let error as SlackError {
-            // Give up rather than retry: the slice expires by itself within minutes, which is
-            // the safety property the slicing bought (ADR-0013).
-            snoozeOwnership.recordEnded()
-            reportSnoozeProblem(error)
-        } catch {
-            snoozeOwnership.recordEnded()
-            note(
-                "Could not resume notifications; the snooze will lapse on its own.",
-                level: .warning
-            )
-        }
-    }
-
-    private func reportSnoozeProblem(_ error: SlackError) {
-        if case .api(code: "missing_scope") = error {
-            note(
-                "Pausing notifications needs new permissions — disconnect and reconnect Slack once.",
-                level: .warning
-            )
-            return
-        }
-        note(error.summary, level: .warning)
-    }
-
     // MARK: - Timing
 
     private func scheduleWake(at date: Date?) {
@@ -531,42 +376,12 @@ final class AppCoordinator {
 
     // MARK: - History
 
-    private func note(_ message: String, level: ActivityEntry.Level = .info) {
+    /// Internal for the same reason as `client` above — the notifications extension reports
+    /// through it, and it lives in another file.
+    func note(_ message: String, level: ActivityEntry.Level = .info) {
         history.insert(ActivityEntry(at: Date(), level: level, message: message), at: 0)
         if history.count > Self.historyLimit {
             history.removeLast(history.count - Self.historyLimit)
-        }
-    }
-
-    private static func describe(_ failure: LoopbackReceiver.Failure) -> String {
-        switch failure {
-        case .identityUnusable:
-            "The loopback certificate could not be used for TLS."
-        case let .portUnavailable(port):
-            "Port \(port) is already in use, so Slack's redirect has nowhere to land."
-        case let .listenerFailed(detail):
-            "The callback listener failed: \(detail)"
-        case .timedOut:
-            "Gave up waiting for Slack. Press Connect to try again."
-        case let .declined(reason):
-            "Slack did not authorise OnAir: \(reason)"
-        case .stateMismatch:
-            "The callback did not match the request OnAir made, so it was rejected."
-        case .malformedRequest:
-            "Something other than Slack's redirect arrived on the callback port."
-        }
-    }
-
-    private static func describe(_ failure: LoopbackIdentity.Failure) -> String {
-        switch failure {
-        case let .toolMissing(path):
-            "\(path) is missing, so the loopback certificate cannot be created."
-        case let .toolFailed(command, status, stderr):
-            "\(command) exited \(status): \(stderr.trimmingCharacters(in: .whitespacesAndNewlines))"
-        case let .importFailed(status):
-            "The loopback certificate could not be read back (OSStatus \(status))."
-        case .noIdentityInArchive:
-            "The loopback certificate archive held no identity."
         }
     }
 }

@@ -41,6 +41,8 @@ disabled_rules:
   # multi-clause guards in this codebase.
   - opening_brace
 
-  # CoreMediaIO and CoreAudio are C APIs whose property getters take `inout` scratch variables;
-  # the rule wants them rewritten in a shape those functions do not offer.
-  - inout_parameter
+# `inout_parameter` used to sit above, to excuse the `inout` scratch variables CoreMediaIO and
+# CoreAudio property getters take. SwiftLint has no such rule — so it suppressed nothing, and
+# every run answered with a warning plus all 225 valid rule identifiers, which is what buried the
+# real violations in `make lint`'s output. Removed rather than renamed: with it gone the strict
+# run is still clean, so whatever it was meant to excuse was never being flagged.

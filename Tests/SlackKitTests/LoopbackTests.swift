@@ -99,7 +99,8 @@ struct LoopbackTests {
         ) }
         let (body, response) = try await context.get("/callback?code=code-xyz&state=state-abc")
         #expect(response.statusCode == 200)
-        #expect(String(decoding: body, as: UTF8.self).contains("OnAir is connected"))
+        let page = try #require(String(bytes: body, encoding: .utf8))
+        #expect(page.contains("OnAir is connected"))
 
         let callback = try await awaited.value
         #expect(callback.code == "code-xyz")
@@ -229,6 +230,57 @@ struct LoopbackTests {
             }
             return (.useCredential, URLCredential(trust: trust))
         }
+    }
+}
+
+/// These sentences are the only thing a user ever sees when a connection fails, so the risk worth
+/// testing is a case whose text drops the one detail that makes it actionable — the port that was
+/// taken, the reason Slack gave — leaving a message that is true and useless.
+@Suite("Loopback failure text")
+struct LoopbackFailureTextTests {
+    @Test("every receiver failure says something, and carries its detail")
+    func receiverFailures() {
+        let cases: [LoopbackReceiver.Failure] = [
+            .identityUnusable,
+            .portUnavailable(51301),
+            .listenerFailed("posix(EADDRINUSE)"),
+            .timedOut,
+            .declined("access_denied"),
+            .stateMismatch,
+            .malformedRequest,
+        ]
+        for failure in cases {
+            #expect(!failure.summary.isEmpty, "\(failure) has no text")
+        }
+        #expect(LoopbackReceiver.Failure.portUnavailable(51301).summary.contains("51301"))
+        #expect(LoopbackReceiver.Failure.declined("access_denied").summary
+            .contains("access_denied"))
+        #expect(
+            LoopbackReceiver.Failure.listenerFailed("posix(EADDRINUSE)").summary
+                .contains("posix(EADDRINUSE)")
+        )
+    }
+
+    @Test("every identity failure says something, and carries its detail")
+    func identityFailures() {
+        let cases: [LoopbackIdentity.Failure] = [
+            .toolMissing("/usr/bin/openssl"),
+            .toolFailed(command: "openssl req", status: 1, stderr: "  unknown option  "),
+            .importFailed(-25300),
+            .noIdentityInArchive,
+        ]
+        for failure in cases {
+            #expect(!failure.summary.isEmpty, "\(failure) has no text")
+        }
+        #expect(LoopbackIdentity.Failure.toolMissing("/usr/bin/openssl").summary
+            .contains("/usr/bin/openssl"))
+        #expect(LoopbackIdentity.Failure.importFailed(-25300).summary.contains("-25300"))
+        // The stderr is trimmed on the way in, so the message reads as a sentence rather than as a
+        // sentence with a shell's blank lines in the middle of it.
+        let failed = LoopbackIdentity.Failure
+            .toolFailed(command: "openssl req", status: 1, stderr: "  unknown option  ")
+        #expect(failed.summary.hasSuffix("unknown option"))
+        #expect(failed.summary.contains("openssl req"))
     }
 }
 

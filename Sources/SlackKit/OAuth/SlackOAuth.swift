@@ -66,8 +66,10 @@ public enum SlackOAuth {
         if let legacy = try? JSONDecoder().decode(LegacyItem.self, from: data) {
             return (legacy.clientID, true)
         }
-        let plain = String(decoding: data, as: UTF8.self)
-        return plain.isEmpty ? nil : (plain, false)
+        // Bytes that are not UTF-8 are not a client id, and join the empty case in reporting
+        // "nothing usable stored here" rather than a string built out of replacement characters.
+        guard let plain = String(bytes: data, encoding: .utf8), !plain.isEmpty else { return nil }
+        return (plain, false)
     }
 
     /// Both pairs follow the same rule: `read` as well as `write`, because OnAir must see what is

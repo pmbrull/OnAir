@@ -89,7 +89,7 @@ make purge-loopback # list loopback keys stranded in the login keychain before A
 
 ## Current state
 
-v0.1. Everything described above is built and the gate is green: 112 tests in 12 suites, including a
+v0.1. Everything described above is built and the gate is green: 115 tests in 13 suites, including a
 device journey against this Mac's real hardware and a loopback suite that mints a real certificate
 and drives a real TLS listener with `URLSession`.
 

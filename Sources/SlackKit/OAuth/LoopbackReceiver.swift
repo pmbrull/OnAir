@@ -27,6 +27,28 @@ public final class LoopbackReceiver: @unchecked Sendable {
         /// guidance, and the code is discarded unexchanged.
         case stateMismatch
         case malformedRequest
+
+        /// What to tell the user, kept beside the cases for the same reason `SlackError.summary`
+        /// is: a new case and the sentence explaining it are one change, and splitting them across
+        /// targets is how a failure ends up reaching someone as a raw enum name.
+        public var summary: String {
+            switch self {
+            case .identityUnusable:
+                "The loopback certificate could not be used for TLS."
+            case let .portUnavailable(port):
+                "Port \(port) is already in use, so Slack's redirect has nowhere to land."
+            case let .listenerFailed(detail):
+                "The callback listener failed: \(detail)"
+            case .timedOut:
+                "Gave up waiting for Slack. Press Connect to try again."
+            case let .declined(reason):
+                "Slack did not authorise OnAir: \(reason)"
+            case .stateMismatch:
+                "The callback did not match the request OnAir made, so it was rejected."
+            case .malformedRequest:
+                "Something other than Slack's redirect arrived on the callback port."
+            }
+        }
     }
 
     public static let callbackPath = "/callback"
@@ -126,8 +148,10 @@ public final class LoopbackReceiver: @unchecked Sendable {
     /// An HTTP request head can be split across TCP segments, so read until the blank line rather
     /// than assuming one `receive` holds the whole thing.
     private func receive(on connection: NWConnection, accumulated: Data) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 16 * 1024) {
-            [weak self] chunk, _, isComplete, error in
+        connection.receive(
+            minimumIncompleteLength: 1,
+            maximumLength: 16 * 1024
+        ) { [weak self] chunk, _, isComplete, error in
             guard let self else { return }
             var buffer = accumulated
             if let chunk {
@@ -154,11 +178,13 @@ public final class LoopbackReceiver: @unchecked Sendable {
     }
 
     private func handleRequest(_ head: Data, on connection: NWConnection) {
-        let text = String(decoding: head, as: UTF8.self)
-        guard let requestLine = text.split(separator: "\r\n", omittingEmptySubsequences: false)
-            .first,
-            let target = requestLine.split(separator: " ").dropFirst().first,
-            let components = URLComponents(string: "http://localhost\(target)")
+        // Bytes that are not UTF-8 are not Slack's redirect, so they join the malformed case
+        // below rather than being coerced into a string and failing the parse one line later.
+        guard let text = String(bytes: head, encoding: .utf8),
+              let requestLine = text.split(separator: "\r\n", omittingEmptySubsequences: false)
+              .first,
+              let target = requestLine.split(separator: " ").dropFirst().first,
+              let components = URLComponents(string: "http://localhost\(target)")
         else {
             reply(on: connection, status: "400 Bad Request", html: Self.page(
                 title: "That didn't look like Slack",
