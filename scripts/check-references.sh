@@ -9,7 +9,9 @@ fail() {
     status=1
 }
 
-includes=(--include='*.md' --include='*.swift' --include='*.sh' --include='*.yml')
+# Makefile included by name: the release lane references ADR-0017 there, and a grep that never
+# scans it would let those references dangle unproven.
+includes=(--include='*.md' --include='*.swift' --include='*.sh' --include='*.yml' --include='Makefile')
 
 echo "references resolve"
 while IFS=: read -r file line id; do

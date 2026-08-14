@@ -18,6 +18,12 @@
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Pere Miquel Brull.</string>
 
 	<!-- Menu-bar only: no Dock icon, no app switcher entry. -->
 	<key>LSUIElement</key>

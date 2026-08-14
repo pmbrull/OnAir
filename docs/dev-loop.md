@@ -13,6 +13,10 @@ make app            # assemble .build/OnAir.app
 make run            # build and launch
 make install        # copy to /Applications
 make purge-loopback # list the loopback keys stranded in the login keychain before ADR-0016
+make icon           # regenerate Resources/AppIcon.icns from scripts/make-icon.swift
+make dist           # release build → Developer ID sign → universal zip; refuses without the identity
+make notarize       # submit the dist zip to Apple, staple, assess, re-zip
+make release        # dist + notarize — the walkthrough is docs/runbooks/release.md
 make uninstall      # remove the app, its Keychain items and its support directory
 ```
 
@@ -116,7 +120,7 @@ Then, in order:
 
 ## Regenerating the emoji table
 
-`Sources/StatusKit/EmojiTable.swift` is the repo's only generated file: 1913 shortcode → glyph pairs
+`Sources/StatusKit/EmojiTable.swift` is one of the repo's two generated files: 1913 shortcode → glyph pairs
 from a pinned tag of github/gemoji, so `:movie_camera:` reaches the user as 🎥 (ADR-0014). It is
 vendored and committed, never fetched at build or run time (ADR-0004). Refresh it only when Unicode
 adds emoji:
@@ -131,6 +135,11 @@ becomes Swift source in a process holding a Slack token, and a Swift multiline l
 `\(...)`. The pack is positional too, so one dropped token would shift every lookup after it, which
 is why the test asserts per pair and names the one that failed rather than counting entries.
 
+The other generated file is `Resources/AppIcon.icns`. `make icon` redraws every size from
+`scripts/make-icon.swift` — pure code, no design tool, and rerunning the script is the only way
+the icon is ever edited — then packs the result with `iconutil`. Commit the icns; `make app` and
+`make dist` copy it into the bundle.
+
 ## Signing
 
 `make app` prefers a Developer ID, then an Apple Development identity, then falls back to ad-hoc
@@ -138,6 +147,12 @@ and says so. Signing is not load-bearing for permissions here — OnAir needs no
 (ADR-0001) — but `SMAppService` refuses to register an unsigned bundle, so **Launch at login only
 works from a properly signed app**, ideally one in `/Applications`. Settings reports the failure
 rather than leaving a switch that quietly does nothing.
+
+That fallback chain is for the local bundle only. The release lane is the opposite by design:
+`make dist` refuses to run without a Developer ID Application identity rather than shipping an
+ad-hoc signature Gatekeeper would reject on every other Mac (ADR-0017). To exercise the lane on a
+machine without the certificate, `make dist DIST_SIGN_ID=-`; the walkthrough is
+[`runbooks/release.md`](runbooks/release.md).
 
 ## Residue
 
