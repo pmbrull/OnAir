@@ -9,7 +9,7 @@ fail() {
     status=1
 }
 
-# Makefile included by name: the release lane references ADR-0016 there, and a grep that never
+# Makefile included by name: the release lane references ADR-0017 there, and a grep that never
 # scans it would let those references dangle unproven.
 includes=(--include='*.md' --include='*.swift' --include='*.sh' --include='*.yml' --include='Makefile')
 

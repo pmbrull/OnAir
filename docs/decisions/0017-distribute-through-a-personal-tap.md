@@ -1,4 +1,4 @@
-# ADR-0016 — Distribute through a personal Homebrew tap, as a notarized zip, released locally
+# ADR-0017 — Distribute through a personal Homebrew tap, as a notarized zip, released locally
 
 - Status: Accepted
 - Date: 2026-08-14

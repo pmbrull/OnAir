@@ -1,4 +1,4 @@
-# Plan 0005 — Release through a personal Homebrew tap
+# Plan 0006 — Release through a personal Homebrew tap
 
 - Status: Active
 - Date: 2026-08-14
@@ -50,7 +50,7 @@ checksums an artefact, and no cask or tap exists.
 
 ## Steps
 
-1. **ADR-0016**: distribute through a personal tap as a notarized zip, released from this machine.
+1. **ADR-0017**: distribute through a personal tap as a notarized zip, released from this machine.
 2. **Icon**: `scripts/make-icon.sh` drives a small Swift renderer (AppKit, build-host only — not a
    target, so A2 is not in play) that draws the ON AIR sign onto the macOS icon grid at every
    required size, then `iconutil` packs `AppIcon.icns`. Commit the icns; reference it from
@@ -86,7 +86,7 @@ checksums an artefact, and no cask or tap exists.
 
 - 2026-08-14 — Local release lane, not CI signing — the certificate lives on this machine;
   importing it into GitHub Actions secrets adds a leak surface and an untestable-until-tagged
-  workflow. Revisit if a second maintainer appears. Recorded in ADR-0016.
+  workflow. Revisit if a second maintainer appears. Recorded in ADR-0017.
 - 2026-08-14 — Personal tap first, `homebrew/cask` later — the official repo gates on
   project notability (stars/forks thresholds a new repo cannot meet); a personal tap has no gate
   and the cask moves over unchanged if the project ever qualifies.
@@ -105,7 +105,7 @@ checksums an artefact, and no cask or tap exists.
   drift from what users download; `spctl --assess` moved before the re-zip so a failed verdict
   leaves no publishable-looking artefact; `$(filter -,…)` → `$(subst)` for the ad-hoc timestamp
   test (word-list match would hit a "-" token inside a real identity name); `.NOTPARALLEL:`;
-  loud `fatalError` on nil drawing context and missing SF Rounded in the icon renderer; ADR-0016
+  loud `fatalError` on nil drawing context and missing SF Rounded in the icon renderer; ADR-0017
   status header; CI now asserts the icon in the assembled bundle; `check-references.sh` scans the
   Makefile; doc-gardener's staleness list (dev-loop, ARCHITECTURE, first-run, profile, README
   count, CLAUDE.md state) applied in full.

@@ -1,13 +1,34 @@
 # Runbook — cutting a release
 
 How OnAir gets from a green `main` to `brew install --cask pmbrull/tap/onair`. The mechanics live
-in `make release` (ADR-0016); this is the walkthrough, split into **one-time setup** (§1–§4) and
+in `make release` (ADR-0017); this is the walkthrough, split into **one-time setup** (§1–§4) and
 **every release** (§5). Written when this machine had zero codesigning identities — §1 starts
 from nothing.
 
 Everything here runs with the Command Line Tools alone: `notarytool` and `stapler` ship in CLT
 (`/Library/Developer/CommandLineTools/usr/bin/`), and `codesign`, `ditto`, `lipo`, `iconutil` and
 `spctl` are system binaries. No Xcode required.
+
+## 0. One-time — a fresh machine
+
+The lane assumes nothing pre-installed. On a Mac that has never built OnAir:
+
+```bash
+xcode-select --install                      # Command Line Tools — the only toolchain needed
+xcrun --find notarytool && xcrun --find stapler   # both must resolve (see below)
+brew install gh                             # publishing talks to GitHub releases
+gh auth login
+git clone git@github.com:pmbrull/OnAir.git && cd OnAir
+make verify                                 # green before anything else
+```
+
+- The two `xcrun --find` lines are the load-bearing check: both tools resolved inside CLT on the
+  machine this runbook was measured on. If either is missing, update the CLT (or install Xcode —
+  overkill, but sufficient).
+- `swiftformat`/`swiftlint` absent is fine — `make verify` says SKIP for those locally and CI
+  enforces them; `brew install swiftformat` if you want the check local.
+- Creating the certificate (§1) **on the release machine** is the clean path: the private key is
+  born in that keychain and never travels. Only export a `.p12` if a second machine must sign.
 
 ## 1. One-time — the Developer ID certificate
 
@@ -34,7 +55,7 @@ the **Account Holder** role (only that role can create Developer ID certificates
    [apple.com/certificateauthority](https://www.apple.com/certificateauthority/) and install it.
 
 Keep the private key backed up (Keychain Access → export as `.p12`, to somewhere encrypted). The
-key never enters this repo, GitHub secrets, or any file here — ADR-0016.
+key never enters this repo, GitHub secrets, or any file here — ADR-0017.
 
 ## 2. One-time — notary credentials
 

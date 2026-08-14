@@ -29,7 +29,7 @@ TEST_FLAGS ?= $(shell if ! xcrun -f xctest >/dev/null 2>&1 && [ -d "$(CLT_FRAMEW
     "$(CLT_FRAMEWORKS)" "$(CLT_FRAMEWORKS)" "$(CLT_LIB)"; fi)
 
 .PHONY: help verify build test fmt fmt-check lint arch references hooks doctor doctor-slack \
-        app run install uninstall clean icon dist notarize release
+        app run install purge-loopback uninstall clean icon dist notarize release
 
 ## The release lane's targets write and then read the same artefacts; running them interleaved
 ## under -j would zip a bundle mid-signature. Nothing here benefits from parallel make anyway —
@@ -129,7 +129,7 @@ run: app ## Build and launch the app
 icon: ## Regenerate Resources/AppIcon.icns from scripts/make-icon.swift
 	@./scripts/make-icon.sh
 
-## ---- The release lane (ADR-0016; the walkthrough is docs/runbooks/release.md) ---------------
+## ---- The release lane (ADR-0017; the walkthrough is docs/runbooks/release.md) ---------------
 ##
 ## `dist` refuses to run without a Developer ID Application identity: an ad-hoc or Apple
 ## Development signature would pass here and then be refused by Gatekeeper on every other Mac,
@@ -163,7 +163,7 @@ dist: ## Build, sign (hardened runtime) and zip the universal release artefact
 	}
 	@if [ -z "$(DIST_SIGN_ID)" ]; then \
 	  echo "error: no 'Developer ID Application' identity in the keychain."; \
-	  echo "       A release must be Developer-ID signed (ADR-0016) — docs/runbooks/release.md §1."; \
+	  echo "       A release must be Developer-ID signed (ADR-0017) — docs/runbooks/release.md §1."; \
 	  echo "       To exercise the lane without the certificate: make dist DIST_SIGN_ID=-"; \
 	  exit 1; \
 	fi
@@ -211,8 +211,15 @@ install: app ## Copy the bundle into /Applications
 
 ## The token is a Keychain item and the loopback identity is a file; neither goes away when the
 ## bundle does. Removing the app without this leaves both behind.
+## Reports; deletes nothing. The `--apply` run is left to a human because it removes items from
+## their login keychain, and the matcher — parsed subject `O=OnAir`, never the `localhost` label —
+## is the only thing standing between it and somebody's own development certificate (ADR-0016).
+purge-loopback: ## Report the loopback identities stranded in the login keychain before ADR-0016
+	@./scripts/purge-loopback-keychain.sh
+
 uninstall: ## Remove the app, its Keychain items and its application-support directory
 	@rm -rf "/Applications/$(APP_NAME).app"
+	@./scripts/purge-loopback-keychain.sh --apply
 	@security delete-generic-password -s "$(BUNDLE_ID)" -a slack-token >/dev/null 2>&1 \
 	  && echo "removed the Slack token from the Keychain" || true
 	@security delete-generic-password -s "$(BUNDLE_ID)" -a slack-client >/dev/null 2>&1 \

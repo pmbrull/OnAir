@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Render the Homebrew cask with the version and sha256 filled in, so updating
-# pmbrull/homebrew-tap is a paste, not a hand-edit (ADR-0016). Writes .build/dist/onair.rb and
+# pmbrull/homebrew-tap is a paste, not a hand-edit (ADR-0017). Writes .build/dist/onair.rb and
 # prints it.
 #
 # By default the sha256 comes from the zip actually PUBLISHED on the GitHub release — downloaded
