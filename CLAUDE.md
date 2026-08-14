@@ -102,15 +102,18 @@ written from exactly one place. Still unmeasured: the fixtures are prose rather 
 or an `expires_in` in a captured exchange (GAP-0002). `make doctor-slack` is the read-only live
 check.
 
-The release lane (ADR-0017) is built and exercised up to Apple's door — `make dist DIST_SIGN_ID=-`
-runs everything short of the notary — but no release has been cut: the keychain holds no Developer
-ID certificate yet, so notarization, the tap and `brew install` are unmeasured until v0.1.0 ships.
-`docs/runbooks/release.md` pins that first release as the measurement point; until then the
-README's brew line is the destination, not the reality.
+The release lane (ADR-0017) has now run for real. **v0.1.0 shipped 2026-08-14**: notarytool
+Accepted the bundle first try, `spctl` answers `Notarized Developer ID` on the brew-installed app,
+and `brew install --cask pmbrull/tap/onair` works from a clean tap. The README's brew line is the
+reality, not the destination. What the release measured — and the two things it still did not — is
+in `docs/runbooks/release.md`.
 
-Two things reality has corrected so far, and both were seen rather than reasoned. **ADR-0011**: the
+Three things reality has corrected so far, and all three were seen rather than reasoned.
+**ADR-0011**: the
 microphone reads *in use* permanently on a Mac running an audio mixer, which turned a planned
 default of "watch both" into "watch the camera, and tell the user how to check whether the
 microphone is safe on their machine". **ADR-0015**: a status restored from a calendar integration
 was stranded forever, because the integration writes `status_expiration` and never comes back —
-restoring the words without the clock removes the only thing that was going to clear it.
+restoring the words without the clock removes the only thing that was going to clear it. And the
+cask's `depends_on macos: ">= :sequoia"` was deprecated the whole time — nothing in this repo could
+say so, because only a real `brew install` runs Homebrew's parser over it.

@@ -56,6 +56,10 @@ sha=$(shasum -a 256 "$zip" | cut -d' ' -f1)
 # Notes pinned to the values below:
 # - `#{version}` is Ruby, evaluated by Homebrew — only version and sha256 change per release.
 # - `:sequoia` is the plist's LSMinimumSystemVersion 15.0 by its macOS name; bump them together.
+#   The bare symbol *is* the minimum-version form: `MacOSRequirement#initialize` defaults its
+#   comparator to `>=`, and Homebrew's own deprecation names `macos: :sequoia` as the replacement
+#   for `macos: ">= :sequoia"`. The string form still installs, with a warning, and is on its way
+#   to being an error — measured on the v0.1.0 install, which is the only thing that shows it.
 # - The caveat's Keychain service name is TokenStore.service
 #   (Sources/OnAir/TokenStore.swift), which declares the same id the plist does — if either
 #   ever moves, move both.
@@ -70,7 +74,7 @@ cask "onair" do
   desc "Menu-bar app that sets your Slack status when your camera turns on"
   homepage "https://github.com/pmbrull/OnAir"
 
-  depends_on macos: ">= :sequoia"
+  depends_on macos: :sequoia
 
   app "OnAir.app"
 

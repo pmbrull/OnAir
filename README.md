@@ -30,8 +30,7 @@ fails the build, not by a promise: see [invariant A5](ARCHITECTURE.md#invariants
 brew install --cask pmbrull/tap/onair
 ```
 
-Signed, notarized, universal (Apple Silicon + Intel), macOS 15+. **Ships with v0.1.0** — until
-that release lands (the TODO below tracks it), build from source instead. Or build from source — requires
+Signed, notarized, universal (Apple Silicon + Intel), macOS 15+. Or build from source — requires
 a Swift 6 toolchain, and no dependencies to fetch because there are none
 ([ADR-0004](docs/decisions/0004-no-third-party-dependencies.md)):
 
@@ -189,9 +188,8 @@ recording every load-bearing choice and the alternative it beat.
 - [x] Register the shared OnAir Slack app (PKCE on) and fill `SlackOAuth.builtInClientID` (ADR-0012).
 - [x] Run the connect flow against a live workspace — `oauth.v2.access` accepted the PKCE exchange,
       and `make doctor-slack` came back with a real profile (GAP-0002).
-- [ ] Cut v0.1.0: certificate + notary profile + tap, then `make release`
-      ([runbook](docs/runbooks/release.md), ADR-0017). Until it ships, the brew line above is the
-      destination, not yet the reality — install from source meanwhile.
+- [x] Cut v0.1.0 — notarized by Apple first try, stapled, and installing from the tap
+      ([runbook](docs/runbooks/release.md), ADR-0017). The brew line above is now the reality.
 - [x] Pick a LICENSE — MIT, chosen for the warranty and liability disclaimer.
 - [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
       carries an expiry (GAP-0001, GAP-0002).
