@@ -55,7 +55,7 @@ Devices
   microphone  idle
 
 Policy
-  status                :movie_camera: On camera
+  status                🎥 On camera
   watch camera          yes
   watch microphone      no
   ...
@@ -81,7 +81,7 @@ is how you find out it applies to you.
 `make test` ends with a line naming the count:
 
 ```
-Test run with 91 tests in 10 suites passed after 2.1 seconds.
+Test run with 111 tests in 12 suites passed after 2.9 seconds.
 ```
 
 The **Device journey** suite disables itself when there is no capture hardware. A CI runner has
@@ -105,10 +105,30 @@ Then, in order:
    `localhost`, and ADR-0005 explains why it has to exist. The tab should end on "OnAir is
    connected".
 4. Open Photo Booth. Within a few seconds the menu-bar glyph becomes a filled record dot and the
-   panel's last line says "Set your status to On camera."
-5. Quit Photo Booth. After `offDelay` the status goes back.
+   panel's last line says "Set your status to 🎥 On camera." — the glyph, not `:movie_camera:`
+   (ADR-0014).
+5. Quit Photo Booth. After `offDelay` the status goes back, carrying whatever `status_expiration`
+   it had when OnAir stashed it — and if that expiry fell due during the call, the status is
+   cleared instead and the panel says which of the two happened (ADR-0015).
 6. Quit OnAir mid-call and check Slack: `applicationShouldTerminate` should have put the status
    back before the process exited (ADR-0009).
+
+## Regenerating the emoji table
+
+`Sources/StatusKit/EmojiTable.swift` is the repo's only generated file: 1913 shortcode → glyph pairs
+from a pinned tag of github/gemoji, so `:movie_camera:` reaches the user as 🎥 (ADR-0014). It is
+vendored and committed, never fetched at build or run time (ADR-0004). Refresh it only when Unicode
+adds emoji:
+
+```bash
+./scripts/generate-emoji-table.sh   # rewrites the file; commit the result
+make test                           # EmojiShortcodeTests re-checks the pack pair by pair
+```
+
+The generator refuses rather than skips when an entry is not the shape it expects — the output
+becomes Swift source in a process holding a Slack token, and a Swift multiline literal interpolates
+`\(...)`. The pack is positional too, so one dropped token would shift every lookup after it, which
+is why the test asserts per pair and names the one that failed rather than counting entries.
 
 ## Signing
 

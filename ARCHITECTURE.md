@@ -26,7 +26,8 @@ contents is [`CLAUDE.md`](CLAUDE.md); the reasoning behind each choice is in
           CoreAudio        Security         only
 ```
 
-`SlackKit` depends on `StatusKit` because `UserStatus` is the domain type both sides speak.
+`SlackKit` depends on `StatusKit` because `UserStatus` and `LiveStatus` are the domain types both
+sides speak — the pair OnAir writes, and that pair plus the expiry Slack actually holds (ADR-0015).
 `DeviceKit` and `StatusKit` depend on nothing but Foundation and the C frameworks. Nothing depends
 on the app.
 
@@ -35,9 +36,13 @@ on the app.
 | Target | Kind | Owns | May import |
 |---|---|---|---|
 | `DeviceKit` | library | Whether any camera or microphone is running somewhere; the device inventory `doctor` prints; hot-plug re-attachment | Foundation, CoreMediaIO, CoreAudio |
-| `StatusKit` | library | `UserStatus`, `StatusPolicy`, `StatusEngine` — the debounce, the pause, the override verdict and the ownership test. **Depends on nothing** | Foundation |
-| `SlackKit` | library | `SlackClient` (three calls), `SlackWire` (decoding), and the OAuth loopback: `SlackOAuth`, `PKCE`, `LoopbackReceiver`, `LoopbackIdentity` | Foundation, Network, Security, CryptoKit, StatusKit |
+| `StatusKit` | library | `UserStatus`, `LiveStatus`, `StatusPolicy`, `StatusEngine`, `EmojiShortcode` — the debounce, the pause, the override verdict, the ownership test, the restore rule and the shortcode table. **Depends on nothing** | Foundation |
+| `SlackKit` | library | `SlackClient` (six calls: profile read/write, identity, three DND), `SlackWire` (decoding), and the OAuth loopback: `SlackOAuth`, `PKCE`, `LoopbackReceiver`, `LoopbackIdentity` | Foundation, Network, Security, CryptoKit, StatusKit |
 | `OnAir` | executable | Menu bar, Settings, `TokenStore`, `PolicyStore`, `LaunchAtLogin`, `AppCoordinator`, `Doctor` | everything above + AppKit, SwiftUI, ServiceManagement |
+
+`Sources/StatusKit/EmojiTable.swift` is the only generated file in the tree: 1913 shortcode → glyph
+pairs vendored from a pinned tag of github/gemoji by `scripts/generate-emoji-table.sh` and
+committed, never fetched at build or run time (ADR-0014, ADR-0004). Regenerate it; do not edit it.
 
 ## Invariants
 
@@ -50,9 +55,12 @@ OAuth flow, which is why `SlackOAuthSession` hands back a URL and the app calls 
 (ADR-0002). "Headless" is not "never rendered" — it is about the framework, not the intent.
 
 **A3 — Everything that decides lives in `StatusKit`.** The app performs; it does not choose. The
-debounce (`StatusEngine.advance`), the override rule (`StatusPolicy.verdict(forLive:)`) and the
-ownership test (`StatusEngine.stillOwns`) are pure functions in the target with no dependencies,
-because the app target has no tests and logic that lives there is logic nothing can assert on. A
+debounce (`StatusEngine.advance`), the override rule (`StatusPolicy.verdict(forLive:)`), the
+ownership test (`StatusEngine.stillOwns`) and the restore rule (`LiveStatus.restoration(now:)`,
+which decides whether a stashed status goes back or gets cleared) are pure functions in the target
+with no dependencies, because the app target has no tests and logic that lives there is logic
+nothing can assert on. Wording follows the same line the moment it changes what a control *means*:
+`StatusPolicy.isRunning` is `!paused` as a tested property, not a `Binding` inversion in a view. A
 new `if` in `AppCoordinator` that changes *whether* something happens belongs on the other side of
 this line. This one is a reviewer rule — no grep can decide it.
 
@@ -83,17 +91,24 @@ the pre-commit hooks, and in CI. A3 is decided by `architecture-reviewer`.
    rather than drop: a device change arriving during a Slack call is looked at *after* it, or the
    camera could go off mid-apply and nothing would ever put the status back.
 4. On `.apply`, the coordinator asks `engine.appliedPrevious` whether this is a **fresh** apply or a
-   **refresh**. Fresh: read the live status, run `policy.verdict(forLive:)`, and either skip or
-   stash-and-write. Refresh: write without re-reading, because the live status is OnAir's own and
-   stashing it would strand the status forever (ADR-0008).
-5. On `.restore`, the coordinator reads the live status and calls `engine.stillOwns(_:)`. If the
-   user edited it by hand during the call, OnAir stands down and says so.
+   **refresh**. Fresh: read the live status as a `LiveStatus` — the pair *and* Slack's
+   `status_expiration` — run `policy.verdict(forLive:)` on `effectiveStatus(now:)`, and either skip
+   or stash-and-write. What gets stashed is the whole `LiveStatus`, expiry included (ADR-0015).
+   Refresh: write without re-reading, because the live status is OnAir's own and stashing it would
+   strand the status forever (ADR-0008).
+5. On `.restore`, the coordinator reads the live status and calls `engine.stillOwns(_:)`, which
+   compares the expiry too: OnAir always writes `0`, so an expiry that has appeared under the same
+   words is evidence somebody else wrote them. If the user edited it by hand during the call, OnAir
+   stands down and says so. Otherwise `LiveStatus.restoration(now:)` decides *what* to write — the
+   stashed status with the expiry it arrived with, or a clear if that expiry fell due during the
+   call, because Slack would have cleared it anyway (ADR-0015). `AppCoordinator.putBack` performs
+   the answer and names which branch it took in the menu.
 6. Failures classify themselves: `requiresReconnect` turns the menu bar red and stops retrying,
    `rateLimited` schedules a wake at Slack's own `Retry-After`, anything else retries with a
    doubling backoff from 15s to 5 minutes. The engine's state is deliberately *not* advanced on
    failure, so the next `advance` returns the same intent.
 7. On quit, `applicationShouldTerminate` returns `.terminateLater` and puts the status back
-   (ADR-0009).
+   through the same `putBack`, expiry and all (ADR-0009, amended by ADR-0015).
 
 ## Where a new signal goes
 

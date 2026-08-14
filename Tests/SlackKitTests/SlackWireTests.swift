@@ -57,15 +57,43 @@ struct SlackWireTests {
 
     @Test("a profile with a status reads both halves")
     func statusIsRead() throws {
-        let status = try SlackWire.status(SlackResponseFixtures.profileWithStatus, status: 200)
-        #expect(status == UserStatus(emoji: ":palm_tree:", text: "On holiday"))
-        #expect(!status.isCleared)
+        let live = try SlackWire.status(SlackResponseFixtures.profileWithStatus, status: 200)
+        #expect(live.status == UserStatus(emoji: ":palm_tree:", text: "On holiday"))
+        #expect(!live.status.isCleared)
+        #expect(live.expiresAt == 0)
     }
 
     @Test("a profile with no status reads as cleared")
     func emptyStatus() throws {
-        let status = try SlackWire.status(SlackResponseFixtures.profileWithoutStatus, status: 200)
-        #expect(status.isCleared)
+        let live = try SlackWire.status(SlackResponseFixtures.profileWithoutStatus, status: 200)
+        #expect(live.status.isCleared)
+    }
+
+    /// The status this feature exists for: an integration's, carrying the clock that will clear
+    /// it. Dropping the expiry here is what leaves someone "In a meeting" all day (ADR-0015).
+    @Test("an integration's status carries its expiry off the wire")
+    func expiringStatusIsRead() throws {
+        let live = try SlackWire.status(
+            SlackResponseFixtures.profileWithExpiringStatus, status: 200
+        )
+        #expect(live.status.text == "In a meeting • Google Calendar")
+        #expect(live.expiresAt == 1_700_003_600)
+    }
+
+    @Test("a profile missing status_expiration throws rather than reading as never")
+    func missingExpirationThrows() {
+        #expect(throws: SlackError.malformedResponse("profile has no status_expiration")) {
+            try SlackWire.status(SlackResponseFixtures.profileMissingExpiration, status: 200)
+        }
+    }
+
+    /// A nonsense value must not collapse into the permissive answer. "Never expires" is the
+    /// reading that writes a status back with nothing left to clear it (ADR-0015).
+    @Test("a negative status_expiration is malformed, not never")
+    func negativeExpirationThrows() {
+        #expect(throws: SlackError.malformedResponse("status_expiration is negative")) {
+            try SlackWire.status(SlackResponseFixtures.profileWithNegativeExpiration, status: 200)
+        }
     }
 
     /// The load-bearing one. If missing keys read as "cleared", the override rule concludes there
@@ -135,6 +163,19 @@ struct SlackWireTests {
         // Omitting this lets an expiry set by something else survive underneath and clear the
         // status at a moment OnAir would then attribute to the user.
         #expect(profile["status_expiration"] as? Int == 0)
+    }
+
+    /// The other half of ADR-0015: OnAir's own status never expires, but a restore must put back
+    /// the expiry the previous status arrived with, or nothing will ever clear it.
+    @Test("a restore can carry someone else's expiry back")
+    func profileSetBodyWithExpiry() throws {
+        let body = try SlackWire.profileSetBody(
+            UserStatus(emoji: ":spiral_calendar_pad:", text: "In a meeting"),
+            expiresAt: 1_700_003_600
+        )
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let profile = try #require(json["profile"] as? [String: Any])
+        #expect(profile["status_expiration"] as? Int == 1_700_003_600)
     }
 
     @Test("clearing is an empty write, since Slack has no delete")

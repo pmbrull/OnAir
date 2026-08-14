@@ -35,6 +35,32 @@ enum SlackResponseFixtures {
     {"ok":true,"profile":{"title":"","real_name":"Pere","team":"T00000000"}}
     """.utf8)
 
+    /// The shape this whole feature is about: a status carrying an expiry, which is how OnAir
+    /// believes a calendar integration's status is meant to be cleared (ADR-0015). **That belief
+    /// is documentation-derived like everything else here** — nothing has captured what Google
+    /// Calendar's Slack app actually writes; GAP-0001 carries the question. `1_700_003_600` is an
+    /// arbitrary instant; the tests compare against it rather than against a clock.
+    static let profileWithExpiringStatus = Data("""
+    {"ok":true,"profile":{"title":"","phone":"","real_name":"Pere","display_name":"pere",
+    "status_text":"In a meeting \\u2022 Google Calendar","status_emoji":":spiral_calendar_pad:",
+    "status_expiration":1700003600,"team":"T00000000"}}
+    """.utf8)
+
+    /// A status with no `status_expiration` key at all. Documented as always present, so this is
+    /// the schema-change shape: it must throw rather than read as "never expires", because that
+    /// reading is what silently strips somebody else's expiry on the way back (ADR-0015).
+    static let profileMissingExpiration = Data("""
+    {"ok":true,"profile":{"real_name":"Pere","status_text":"On holiday",
+    "status_emoji":":palm_tree:","team":"T00000000"}}
+    """.utf8)
+
+    /// Not a shape Slack is known to send either. It pins that a nonsense expiry is malformed
+    /// rather than folded into `0`, which is the permissive reading (ADR-0015).
+    static let profileWithNegativeExpiration = Data("""
+    {"ok":true,"profile":{"real_name":"Pere","status_text":"On holiday",
+    "status_emoji":":palm_tree:","status_expiration":-1,"team":"T00000000"}}
+    """.utf8)
+
     static let authTest = Data("""
     {"ok":true,"url":"https:\\/\\/collate.slack.com\\/","team":"Collate","user":"pere",
     "team_id":"T00000000","user_id":"U00000000"}

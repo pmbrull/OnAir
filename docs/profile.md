@@ -6,7 +6,7 @@ newer and wins — then update this.
 ## Shape
 
 A single-user macOS desktop utility. No server, no accounts, no multi-tenancy. The only remote
-traffic is three Slack Web API calls on the user's own behalf.
+traffic is six Slack Web API calls on the user's own behalf.
 
 ## Stack
 
@@ -59,6 +59,6 @@ machine, and no unit test in the world would have caught it.
 |---|---|
 | Multiple Slack workspaces | a second workspace is actually used daily |
 | Per-app rules (only Zoom, only Meet) | the camera signal proves too coarse in practice |
-| `status_expiration` as a crash net | a stranded status actually happens (ADR-0009) |
+| `status_expiration` **of OnAir's own choosing** as a crash net (it does carry back one it read — ADR-0015) | a stranded status actually happens (ADR-0009) |
 | Screen-sharing detection | the camera signal misses enough presentations to notice |
 | Do Not Disturb alongside the status | wanting it, and accepting the extra `dnd:write` scope |

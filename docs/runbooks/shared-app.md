@@ -60,7 +60,8 @@ Then `make verify`, and check Settings › Slack shows **no** Client ID field an
 ## 5. Close the loop against the live workspace (GAP-0002)
 
 1. Connect from OnAir; approve; pass the certificate warning.
-2. `make doctor-slack` — identity and current status come back read-only.
+2. `make doctor-slack` — identity, current status and its expiry come back, read-only. The
+   `expires` row is the field ADR-0015 turns on.
 3. Note which endpoint answered the exchange and whether the response carried `expires_in`;
    capture the verbatim `oauth.v2.access` response into `SlackResponseFixtures` (redact the token)
    — that is what closes GAP-0002 and shrinks GAP-0001.

@@ -20,4 +20,19 @@ public struct UserStatus: Sendable, Equatable, Codable {
     public var isCleared: Bool {
         emoji.isEmpty && text.isEmpty
     }
+
+    /// The emoji as a person reads it: the glyph when the shortcode is one OnAir knows, and the
+    /// shortcode verbatim when it is not — a workspace custom emoji resolves nowhere but Slack
+    /// (ADR-0014).
+    public var displayEmoji: String {
+        EmojiShortcode.glyph(for: emoji) ?? emoji
+    }
+
+    /// "🎧 In a meeting" — the whole status on one line, for the menu, Settings and `doctor`.
+    /// Either half may be empty, and an empty half must not leave a stray space behind it.
+    public var display: String {
+        [displayEmoji, text]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
 }

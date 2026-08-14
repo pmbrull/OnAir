@@ -22,6 +22,11 @@ that is hours stale by the time the app runs again.
 expiry set by something else cannot survive underneath and clear the status at a moment OnAir
 would then attribute to the user.
 
+**Amended by [ADR-0015](0015-carry-the-previous-status-expiry.md).** The zero is right for the
+status OnAir *chooses*, which is what this decision was about. It was wrong for the status OnAir
+*puts back*: a status written by Google Calendar carries the expiry that was going to clear it, and
+sending zero on the restore strips the only clock it had. A restore now carries the expiry it read.
+
 ## Consequences
 
 - **A crash mid-call leaves the status set until you fix it by hand.** This is a known, accepted

@@ -65,6 +65,9 @@ make uninstall     # remove the app, its Keychain items and its support director
   and the only shipped identifier is the public client id (ADR-0012). A `client_secret` appearing
   anywhere — code, Settings, Keychain — is a regression, not an option.
 - **Never overwrite a status OnAir did not set**, unless the user asked for it (ADR-0008).
+- **Never restore a status without the expiry it arrived with** (ADR-0015). Google Calendar and
+  friends set `status_expiration` and never come back; putting the words back without the clock
+  strands the status forever. A passed expiry restores as a *clear*, not as the old words.
 - **Never import AppKit/SwiftUI/ServiceManagement into a kit** (ADR-0002). Invariant A2.
 - **Never put a decision in the app target.** If it changes *whether* something happens, it belongs
   in `StatusKit`, where it can be tested. Invariant A3.
@@ -75,16 +78,22 @@ make uninstall     # remove the app, its Keychain items and its support director
 
 ## Current state
 
-v0.1. Everything described above is built and the gate is green: 91 tests in 10 suites, including a
+v0.1. Everything described above is built and the gate is green: 111 tests in 12 suites, including a
 device journey against this Mac's real hardware and a loopback suite that mints a real certificate
 and drives a real TLS listener with `URLSession`.
 
-What is **not** verified against reality is Slack's side of the wire: the fixtures were written
-from documentation (GAP-0001), and the PKCE exchange — endpoint choice and token longevity — is
-built to the docs but unmeasured (GAP-0002). The shared Slack app is registered and its id is baked
-into `SlackOAuth.builtInClientID`, so Settings is zero-field; the first live connect is what
-closes GAP-0002. `make doctor-slack` is the read-only live check.
+What is **partly** verified against reality is Slack's side of the wire. One live
+`users.profile.get` (2026-08-13, `make doctor-slack` against Collate) parsed cleanly, which pins
+`status_emoji`, `status_text` and `status_expiration` on the with-a-status shape — and a stored
+token answering at all means `oauth.v2.access` accepted the PKCE exchange, since `TokenStore` is
+written from exactly one place. Still unmeasured: the fixtures are prose rather than captures
+(GAP-0001), the empty-status and error shapes are untouched, and token longevity needs thirty days
+or an `expires_in` in a captured exchange (GAP-0002). `make doctor-slack` is the read-only live
+check.
 
-The one measured surprise so far is ADR-0011: the microphone reads *in use* permanently on a Mac
-running an audio mixer, which turned a planned default of "watch both" into "watch the camera, and
-tell the user how to check whether the microphone is safe on their machine".
+Two things reality has corrected so far, and both were seen rather than reasoned. **ADR-0011**: the
+microphone reads *in use* permanently on a Mac running an audio mixer, which turned a planned
+default of "watch both" into "watch the camera, and tell the user how to check whether the
+microphone is safe on their machine". **ADR-0015**: a status restored from a calendar integration
+was stranded forever, because the integration writes `status_expiration` and never comes back —
+restoring the words without the clock removes the only thing that was going to clear it.

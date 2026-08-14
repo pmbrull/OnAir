@@ -9,19 +9,19 @@ permission, and never appears in Privacy & Security. That property is enforced b
 fails the build, not by a promise: see [invariant A5](ARCHITECTURE.md#invariants).
 
 ```
-┌──────────────────────────────┐
-│ ● pere · Collate             │
-│   🎥 On camera               │
-├──────────────────────────────┤
-│ ● Camera              in use │
-│ ○ Microphone     not watched │
-├──────────────────────────────┤
-│ Set your status to On camera.│
-│                        14:02 │
-├──────────────────────────────┤
-│ Pause OnAir            ( ●   │
-│ Settings…              Quit  │
-└──────────────────────────────┘
+┌───────────────────────────────────┐
+│ ● pere · Collate                  │
+│   🎥 On camera                    │
+├───────────────────────────────────┤
+│ ● Camera                   in use │
+│ ○ Microphone          not watched │
+├───────────────────────────────────┤
+│ Set your status to 🎥 On camera.  │
+│                             14:02 │
+├───────────────────────────────────┤
+│ OnAir is running            (  ●) │
+│ Settings…                    Quit │
+└───────────────────────────────────┘
 ```
 
 ## Install
@@ -106,7 +106,11 @@ install.
   slices while on camera, resumed afterwards. A snooze you set yourself is never touched, and if
   OnAir dies mid-call the slice lapses on its own (ADR-0013).
 - **Restores on quit**, including when you quit mid-meeting.
-- **Pause**, from the menu, immediate in both directions.
+- **Puts back the clock as well as the words.** A status written by Google Calendar or a similar
+  integration expires by itself — that is how it gets cleared, and nothing comes back to do it a
+  second time. OnAir restores that expiry along with the status, and if it fell due while you were
+  on camera it clears your status instead of reviving it (ADR-0015).
+- **One switch**, *OnAir is running*, in the menu — off takes effect immediately, and so does on.
 - **Launch at login**, and a **`doctor`** command that shows you exactly what your Mac's devices are
   doing and what the app would decide about it.
 
@@ -139,13 +143,20 @@ it was found by running `doctor`, not by reasoning about it.
 
 ## Known limitations
 
-- **A crash or a force-quit mid-call leaves your status set.** There is no server-side expiry, on
-  purpose — an expiring status is its own surprise when it vanishes mid-meeting
-  ([ADR-0009](docs/decisions/0009-restore-on-quit-is-the-only-safety-net.md)). Clear it in Slack.
+- **A crash or a force-quit mid-call leaves your status set.** OnAir never gives its own status a
+  server-side expiry, on purpose — an expiring status is its own surprise when it vanishes
+  mid-meeting ([ADR-0009](docs/decisions/0009-restore-on-quit-is-the-only-safety-net.md)). The only
+  expiry it ever writes is one it read off your previous status and put back
+  ([ADR-0015](docs/decisions/0015-carry-the-previous-status-expiry.md)). Clear it in Slack.
 - **One workspace.** Multiple accounts are not built.
 - **It cannot tell you which app is using the camera**, only that something is. Finding out would
   need exactly the privileges this app refuses.
 - **Screen sharing without a camera does not count.** Nothing detects it yet.
+- **Workspace custom emoji show as `:their_name:`, not a picture.** OnAir renders the standard set
+  from a vendored table; a custom emoji is data held inside one workspace, and resolving it would
+  cost a new Slack scope and a reconnect for every user
+  ([ADR-0014](docs/decisions/0014-render-shortcodes-from-a-vendored-table.md)). Slack itself still
+  shows it correctly — it is only OnAir's own menu that cannot.
 - **Slack's responses are not yet verified against a live workspace** — the parser's fixtures come
   from Slack's documentation ([GAP-0001](docs/gaps/open/0001-slack-fixtures-are-documented-not-captured.md)),
   and the PKCE exchange plus token longevity are documented-but-unmeasured
@@ -156,7 +167,7 @@ it was found by running `doctor`, not by reasoning about it.
 
 ```bash
 make verify   # references + architecture invariants + format + lint + build + test
-make test     # 91 tests in 10 suites — use this, not `swift test`
+make test     # 111 tests in 12 suites — use this, not `swift test`
 ```
 
 `swift test` will not work on a machine with only the Command Line Tools: XCTest ships with Xcode,
@@ -164,14 +175,16 @@ so the suite is written against Swift Testing and `make test` supplies the searc
 not. [`docs/dev-loop.md`](docs/dev-loop.md) has the details.
 
 The repo carries its own working agreement — [`CLAUDE.md`](CLAUDE.md),
-[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with thirteen ADRs
+[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with fifteen ADRs
 recording every load-bearing choice and the alternative it beat.
 
 ## TODO
 
 - [x] Register the shared OnAir Slack app (PKCE on) and fill `SlackOAuth.builtInClientID` (ADR-0012).
-- [ ] Run the connect flow against a live workspace and capture real Slack responses (GAP-0001,
-      GAP-0002 — including whether the token carries an expiry).
+- [x] Run the connect flow against a live workspace — `oauth.v2.access` accepted the PKCE exchange,
+      and `make doctor-slack` came back with a real profile (GAP-0002).
+- [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
+      carries an expiry (GAP-0001, GAP-0002).
 - [ ] Decide whether screen sharing is worth a third signal.
 - [ ] Multiple workspaces, if a second one ever gets daily use.
 - [ ] Revisit the crash net if a stranded status actually happens (ADR-0009).

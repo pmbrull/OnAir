@@ -1,7 +1,8 @@
 import Foundation
 import StatusKit
 
-/// The three Slack calls OnAir makes, and nothing else.
+/// The six Slack calls OnAir makes, and nothing else: the profile read and write, `auth.test`,
+/// and the three DND calls (ADR-0013).
 ///
 /// The client is handed a token and **never persists one** — storage is the app's `TokenStore`
 /// and the Keychain (invariant A4, ADR-0006). It is a value, so reconnecting means constructing a
@@ -30,13 +31,16 @@ public struct SlackClient: Sendable {
         return try SlackWire.identity(data, status: status, retryAfter: retryAfter)
     }
 
-    public func currentStatus() async throws -> UserStatus {
+    public func currentStatus() async throws -> LiveStatus {
         let (data, status, retryAfter) = try await post("users.profile.get", body: nil)
         return try SlackWire.status(data, status: status, retryAfter: retryAfter)
     }
 
-    public func setStatus(_ status: UserStatus) async throws {
-        let body = try SlackWire.profileSetBody(status)
+    /// `expiresAt` is Slack's `status_expiration`, and `0` — never expires — is right for every
+    /// status OnAir chooses (ADR-0009). Only a restore passes one, and only the one the previous
+    /// status already carried (ADR-0015).
+    public func setStatus(_ status: UserStatus, expiresAt: Int = 0) async throws {
+        let body = try SlackWire.profileSetBody(status, expiresAt: expiresAt)
         let (data, code, retryAfter) = try await post("users.profile.set", body: body)
         _ = try SlackWire.envelope(data, status: code, retryAfter: retryAfter)
     }

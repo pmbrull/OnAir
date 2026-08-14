@@ -122,11 +122,16 @@ final class AppCoordinator {
         // ADR-0008 applies on the way out too. Quitting is not a licence to overwrite a status the
         // user typed during the call — the check costs one extra call inside the window
         // `.terminateLater` buys, and skipping it would make quitting the one path that clobbers.
+        //
+        // A read that *fails* is deliberately treated the same as one that says "not yours": OnAir
+        // then knows nothing about what Slack holds, and writing blind is the failure ADR-0008
+        // calls the worst one, because it destroys text nothing else remembers. The cost is the
+        // stranded status ADR-0009 already names and the README already warns about.
         guard let live = try? await client.currentStatus(), engine.stillOwns(live) else {
             engine.recordRestored()
             return
         }
-        try? await client.setStatus(previous)
+        try? await putBack(previous, using: client)
         engine.recordRestored()
     }
 
@@ -202,7 +207,23 @@ final class AppCoordinator {
         if let client {
             await releaseSnoozeIfOwned(using: client)
             if let previous = engine.appliedPrevious {
-                try? await client.setStatus(previous)
+                // The same ADR-0008 check the restore and the quit paths make. Without it this is
+                // the one path that writes blind — and since ADR-0015 a blind write over a stash
+                // whose expiry has passed writes a *clear*, deleting a status the user typed by
+                // hand rather than merely replacing it.
+                do {
+                    let live = try await client.currentStatus()
+                    if engine.stillOwns(live) {
+                        try await putBack(previous, using: client)
+                    } else {
+                        note("Your status had changed — left it as it is.", level: .warning)
+                    }
+                } catch {
+                    note(
+                        "Could not put your status back before disconnecting.",
+                        level: .failure
+                    )
+                }
             }
         }
         engine.forgetOwnership()
@@ -292,24 +313,32 @@ final class AppCoordinator {
         if let previous = engine.appliedPrevious {
             try await client.setStatus(wanted)
             engine.recordApplied(status: wanted, previous: previous)
-            note("Updated your status to \(wanted.text).")
+            note("Updated your status to \(wanted.display).")
             await beginSnoozeIfWanted(using: client)
             return
         }
 
         let live = try await client.currentStatus()
-        if case let .leaveAlone(reason) = policy.verdict(forLive: live) {
+        // `effectiveStatus`, not `status`: a status whose expiry has fallen due is one Slack has
+        // already retired, and protecting it would leave OnAir writing nothing for a whole call
+        // because of a status nobody can see. It is also the reading the restore side takes, and
+        // the two must agree (ADR-0015).
+        if case let .leaveAlone(reason) = policy.verdict(forLive: live.effectiveStatus(now: Date()))
+        {
             engine.recordSkipped(reason)
-            note("Left your status alone — “\(live.text)” was already set.", level: .warning)
+            note(
+                "Left your status alone — “\(live.status.display)” was already set.",
+                level: .warning
+            )
             return
         }
         try await client.setStatus(wanted)
         engine.recordApplied(status: wanted, previous: live)
-        note("Set your status to \(wanted.text).")
+        note("Set your status to \(wanted.display).")
         await beginSnoozeIfWanted(using: client)
     }
 
-    private func restore(_ previous: UserStatus, using client: SlackClient) async throws {
+    private func restore(_ previous: LiveStatus, using client: SlackClient) async throws {
         let live = try await client.currentStatus()
         guard engine.stillOwns(live) else {
             // Changed by hand during the call. OnAir does not own it any more, and putting the
@@ -324,10 +353,35 @@ final class AppCoordinator {
             await releaseSnoozeIfOwned(using: client)
             return
         }
-        try await client.setStatus(previous)
+        try await putBack(previous, using: client)
         engine.recordRestored()
-        note(previous.isCleared ? "Cleared your status." : "Put “\(previous.text)” back.")
         await releaseSnoozeIfOwned(using: client)
+    }
+
+    /// Put a stashed status back the way it was always going to end, and say which way that was.
+    ///
+    /// The expiry travels with it: a status written by Google Calendar or any other integration
+    /// carries the clock that was going to clear it, and those integrations do not come back to
+    /// tidy up — writing the words without the clock is what leaves someone "In a meeting" for the
+    /// rest of the day (ADR-0015). The decision of *which* of the two things to write is
+    /// `LiveStatus.restoration`, in `StatusKit`, where it is tested (A3).
+    ///
+    /// It writes its own history line rather than returning one, so every caller reports the
+    /// outcome — the clear is the surprising branch, and the path that dropped it silently was the
+    /// one where the user is still looking at the menu.
+    private func putBack(_ previous: LiveStatus, using client: SlackClient) async throws {
+        switch previous.restoration(now: Date()) {
+        case let .put(status, expiresAt):
+            try await client.setStatus(status, expiresAt: expiresAt)
+            note(status.isCleared ? "Cleared your status." : "Put “\(status.display)” back.")
+        case .expired:
+            try await client.setStatus(.cleared)
+            note(
+                "“\(previous.status.display)” expired during your call — cleared your status "
+                    + "instead of putting it back.",
+                level: .warning
+            )
+        }
     }
 
     // MARK: - Notifications (ADR-0013)

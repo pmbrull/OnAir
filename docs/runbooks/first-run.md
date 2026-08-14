@@ -79,8 +79,11 @@ carried an `expires_in`.
 
 ## 4. Try it
 
-Open Photo Booth. Within a few seconds the menu-bar glyph fills in and your Slack status changes.
-Close it; after a minute the old status comes back.
+Open Photo Booth. Within a few seconds the menu-bar glyph fills in and your Slack status changes —
+the menu shows the emoji as a glyph, 🎥, not as `:movie_camera:` (ADR-0014). Close it; after a
+minute the old status comes back, with whatever expiry it carried before OnAir touched it. If that
+expiry fell due while you were on camera — a Google Calendar "In a meeting" whose event has ended —
+your status is **cleared** instead of revived, and the menu's last line says so (ADR-0015).
 
 ## Troubleshooting
 
@@ -92,4 +95,5 @@ Close it; after a minute the old status comes back.
 | Browser says "redirect_uri did not match" | The Redirect URL is not saved, or differs by a character. |
 | Connected, camera on, nothing happens | The menu's last line says why. Most often: you already had a status set and **Replace a status I set myself** is off (ADR-0008). |
 | Launch at login does nothing | `SMAppService` needs a signed bundle. `make app` says whether it signed or fell back to ad-hoc. |
-| Status stuck on after a crash | Known and accepted — no server-side expiry (ADR-0009). Clear it in Slack. |
+| Status stuck on after a crash | Known and accepted — OnAir gives its own status no server-side expiry (ADR-0009). Clear it in Slack. |
+| Your old status was cleared instead of restored | Its `status_expiration` fell due during the call. Slack would have cleared it anyway, so OnAir does not revive a status you had already stopped having (ADR-0015). The menu's last line names it. |
