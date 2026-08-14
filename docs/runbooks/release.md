@@ -145,17 +145,28 @@ then.
 
    The menu-bar icon appears, `doctor` behaves, Connect works. Only now is the release done.
 
-## What the first real release measures
+## What the first real release measured
 
-The lane below `notarize` is exercised (`make dist DIST_SIGN_ID=-` runs everything but Apple);
-Apple's half is not, until a real submission happens. Unmeasured until then, in GAP spirit —
-recorded, not assumed:
+v0.1.0 shipped 2026-08-14, and the whole lane ran for the first time. What had been recorded here
+as unmeasured is now measured:
 
-- Whether notarytool **Accepts** the bundle as signed here (hardened runtime on, timestamp on,
-  no entitlements, no camera keys — all the known requirements are met).
+- **notarytool Accepted the bundle**, submission `0dc7fb88-b0bc-4c53-a9a0-328f146e7048`, first
+  try, no changes to the signing flags. `stapler` stapled it and `spctl --assess` answered
+  `accepted / source=Notarized Developer ID` — both on the build directory and, afterwards, on the
+  brew-installed `/Applications/OnAir.app`.
+- **`brew install --cask pmbrull/tap/onair` works** end to end from a clean tap.
+- The **`depends_on macos:` string form is deprecated**, which only the real install revealed:
+  Homebrew warned at `Casks/onair.rb:10` and named `macos: :sequoia` as the replacement. The bare
+  symbol is the same constraint — `MacOSRequirement` defaults its comparator to `>=` —
+  so `scripts/make-cask.sh` now emits it. Still a warning today; on its way to an error.
+
+Still unmeasured, and left recorded rather than assumed:
+
 - The **Keychain consent prompt on upgrade from a dev build**: the Slack token was written by a
   differently-signed binary, so the first Developer-ID-signed launch asks once before reading
-  it. Expected behaviour, not a bug; a fresh install never sees it.
+  it. Expected behaviour, not a bug; a fresh install never sees it. The machine that cut v0.1.0
+  had no stored token at the time, so this path did not run.
+- **Notarization on a second release**, where the only variable is a bumped version.
 
 ## When something refuses
 
