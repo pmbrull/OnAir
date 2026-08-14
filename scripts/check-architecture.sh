@@ -93,6 +93,25 @@ if hits=$(grep -rn '<key>NS\(Camera\|Microphone\)UsageDescription</key>' Resourc
     done <<<"$hits"
 fi
 
+echo "A6 — the loopback key never touches a keychain"
+# `SecPKCS12Import` on macOS imports into the *default* keychain unless `kSecImportToMemoryOnly`
+# says otherwise, so the obvious call leaves a certificate and a private key behind on every
+# distinct archive — and each key's ACL names the importing binary, which is how the user ends up
+# typing their login password for OnAir. This is checked rather than commented because "simplify
+# the import options" is exactly the shape of change that would undo it (ADR-0016).
+# The open paren keeps prose out of it: the comment above the call names the function too, and
+# flagging that as a second violation would make one mistake look like two.
+if hits=$(grep -rn 'SecPKCS12Import(' Sources 2>/dev/null); then
+    while IFS= read -r hit; do
+        file="${hit%%:*}"
+        # The dictionary-key form, not a bare mention: the fix is documented in a comment right
+        # above the call, and a plain `grep kSecImportToMemoryOnly` would be satisfied by the
+        # comment explaining the option after somebody deleted the option.
+        grep -qE 'kSecImportToMemoryOnly *as *String *:' "$file" ||
+            fail "$hit — SecPKCS12Import must pass kSecImportToMemoryOnly (A6, ADR-0016)"
+    done <<<"$hits"
+fi
+
 if [ "$status" -eq 0 ]; then
     printf '\033[32marchitecture invariants hold\033[0m\n'
 fi

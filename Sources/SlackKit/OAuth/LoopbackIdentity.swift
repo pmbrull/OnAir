@@ -124,10 +124,24 @@ public enum LoopbackIdentity {
 
     // MARK: - Importing
 
+    /// **`kSecImportToMemoryOnly` is load-bearing, not tidiness** (invariant A6, ADR-0016).
+    /// Without it, `SecPKCS12Import` on macOS permanently deposits the certificate *and its private
+    /// key* in the login keychain — once per distinct archive, so once per connect and once per
+    /// test that mints. Each deposited key carries an ACL naming the process that imported it, and
+    /// a rebuilt binary is not that process, so macOS starts asking the user for their login
+    /// password on OnAir's behalf. Measured before the fix: 268 stranded keys on one machine.
+    ///
+    /// Memory is the right place regardless. This key authenticates `localhost` to this machine's
+    /// own browser for the seconds a callback is in flight; the archive on disk is the durable
+    /// copy, and it is the archive — not a keychain entry — that keeps the browser from warning
+    /// about a different certificate every launch.
     private static func importIdentity(from archive: URL) throws -> SecIdentity {
         let data = try Data(contentsOf: archive)
         var items: CFArray?
-        let options = [kSecImportExportPassphrase as String: archivePassphrase] as CFDictionary
+        let options = [
+            kSecImportExportPassphrase as String: archivePassphrase,
+            kSecImportToMemoryOnly as String: kCFBooleanTrue as Any,
+        ] as CFDictionary
         let status = SecPKCS12Import(data as CFData, options, &items)
         guard status == errSecSuccess else { throw Failure.importFailed(status) }
         guard let entries = items as? [[String: Any]],

@@ -29,6 +29,7 @@ hardware, not by reasoning.
 | --- | --- |
 | [0001](open/0001-slack-fixtures-are-documented-not-captured.md) | The Slack response fixtures are documentation-derived, never captured |
 | [0002](open/0002-pkce-flow-unverified-against-a-live-workspace.md) | The PKCE flow and its token longevity are unverified against a live workspace |
+| [0003](open/0003-one-unexplained-keychain-deposit-after-the-fix.md) | One run deposited seven keychain items after the ADR-0016 fix, and nothing has reproduced it |
 
 ## Closed
 
