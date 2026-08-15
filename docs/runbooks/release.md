@@ -57,12 +57,33 @@ the **Account Holder** role (only that role can create Developer ID certificates
    the **Developer ID – G2** intermediate from
    [apple.com/certificateauthority](https://www.apple.com/certificateauthority/) and install it.
 
-5. **Export it for CI**, since ADR-0018 signs on a runner. Keychain Access → the *private key* under
-   your certificate → **Export…** → `.p12`, with a passphrase you generate rather than type:
+5. **Export it for CI**, since ADR-0018 signs on a runner. Keychain Access → **My Certificates** →
+   the `Developer ID Application:` row → **Export…** → `.p12`.
 
    ```bash
+   openssl rand -base64 24 | tr -d '\n' | pbcopy       # the passphrase; paste it into the dialog
    base64 -i DeveloperID.p12 | tr -d '\n' | pbcopy     # → DEVELOPER_ID_P12_BASE64
    ```
+
+   **The passphrase is not optional.** Keychain Access will happily export with an empty one, and the
+   release job then fails at `Missing secrets`: an empty `DEVELOPER_ID_P12_PASSWORD` is
+   indistinguishable from a secret nobody set, and guessing which it was is exactly the silent
+   fallback this repo refuses. Meanwhile an unprotected `.p12` is your signing key readable by
+   anything running as you. Measured 2026-08-15, on the first export.
+
+   Verify the archive before uploading it — the mistake that costs the most time is exporting the
+   certificate without its private key, which fails much later inside `codesign`:
+
+   ```bash
+   /usr/bin/openssl pkcs12 -in DeveloperID.p12 -nokeys -clcerts | /usr/bin/openssl x509 -noout -subject
+   /usr/bin/openssl pkcs12 -in DeveloperID.p12 -nocerts -nodes | grep -c 'PRIVATE KEY'   # must be > 0
+   ```
+
+   `/usr/bin/openssl`, deliberately: Keychain encrypts the certificate bag with **RC2-40-CBC**, which
+   OpenSSL 3 (a `brew install openssl` on `PATH`) refuses as legacy —
+   `unsupported ... Algorithm (RC2-40-CBC : 0)`. macOS ships LibreSSL, which reads it; `-legacy` also
+   works on OpenSSL 3. None of this reaches CI, which imports with `security import` — Apple's own
+   code, reading Apple's own format.
 
    Then delete the `.p12` from disk. It becomes two repository secrets (§5) and a backup somewhere
    encrypted; it is never a file in this repo and never a file left in `~/Downloads`.
@@ -264,6 +285,8 @@ Still unmeasured, and left recorded rather than assumed:
 | …and the subject is `Merge pull request #N from …` | The PR was merged with a merge commit rather than squashed. GitHub writes that subject, and no rule can read a version out of it — squash-merge, or dispatch with an explicit version |
 | The release job says `Already tagged` | A previous run died after tagging. Finish it with §7 from step 3 — do not re-run the workflow |
 | The release job says `Wrong identity` | The `.p12` in secrets is not a Developer ID Application certificate (an Apple Development one signs fine locally and is refused by every other Mac) |
+| The release job says `Missing secrets` and you did set them | `DEVELOPER_ID_P12_PASSWORD` is empty because the `.p12` was exported without a passphrase — re-export per §1.5 |
+| `openssl` locally → `unsupported ... RC2-40-CBC` | OpenSSL 3 refusing Keychain's legacy cipher. Use `/usr/bin/openssl` or add `-legacy`; the export is fine and CI never sees this |
 | `codesign` → `errSecInternalComponent` | Keychain locked (common over SSH): `security unlock-keychain login.keychain-db` |
 | `notarytool` verdict `Invalid` | `xcrun notarytool log <submission-id> --keychain-profile onair-notary` — per-file reasons, usually a missing hardened runtime or timestamp |
 | `notarytool` → `HTTP 401` in CI | The App Store Connect key was revoked, or the `.p8` secret lost a line. Regenerate per §2 |
