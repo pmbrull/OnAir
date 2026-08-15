@@ -281,19 +281,47 @@ been recorded here as unmeasured is now measured:
   symbol is the same constraint — `MacOSRequirement` defaults its comparator to `>=` —
   so `scripts/make-cask.sh` now emits it. Still a warning today; on its way to an error.
 
+## What the first CI release measured
+
+**v0.2.0 shipped 2026-08-15 through Actions**, run `31894635012`, and the lane ADR-0018 describes ran
+end to end for the first time. The release job took **2m40s**; the gate ahead of it is the long pole.
+
+- **The whole lane works unattended.** Keychain import → `make dist` → `notarytool` → `stapler` →
+  `spctl` → bump commit → tag → release → tap push, no hand step. notarytool Accepted submission
+  `15f8e1ed-be5c-42c9-b75a-820b07ce51a2`, first try, `In Progress → Accepted`.
+- **A CI-signed artefact is Gatekeeper-clean.** `spctl --assess` on the published zip, unpacked on a
+  different machine: `accepted / source=Notarized Developer ID`, authority
+  `Developer ID Application: Pere Miquel Brull Borras (HY672S89H5)`, `flags=0x10000(runtime)`,
+  `TeamIdentifier=HY672S89H5`, archs `x86_64 arm64`, and `stapler validate` passes. Identical to what
+  the laptop produced for v0.1.0.
+- **The cask cannot drift from the asset.** The published `OnAir-0.2.0.zip` downloaded independently
+  hashes to `1e15c449521c81100943b2fd24d7237b2faa7aae5e3b6da88cdba6368e44ec1a`, byte-for-byte the
+  `sha256` in the tap. Hashing the *published* asset rather than the local one is what buys this, and
+  it is now a measurement rather than an argument.
+- **`brew upgrade` is the update story, in fact and not just in ADR-0017's prose.**
+  `brew upgrade --cask pmbrull/tap/onair` moved an installed app `0.1.0 -> 0.2.0`, backed the old
+  bundle up into `Caskroom/onair/0.1.0`, and purged it. Until now only a *fresh install* had ever
+  been exercised.
+- **The workflow does not retrigger itself.** The bot's `chore(release): v0.2.0 [skip ci]` push to
+  `main` started nothing — the run list shows no fourth run. Both guards hold, and the belt was
+  never needed because a `GITHUB_TOKEN` push does not trigger workflows at all.
+- **The ordering property is real, because it was tested by failing.** The run before this one
+  (`31894336554`) died at `Import the Developer ID identity` on a passphrase mismatch. Afterwards:
+  `v0.1.0` still the only tag, no release, plist still `0.1.0`, tap untouched. A failed release left
+  nothing to clean up, which is the entire point of bumping the plist in the working tree.
+
 Still unmeasured, and left recorded rather than assumed:
 
-- **The CI lane, end to end.** ADR-0018 is built and its bump rule has a table test, but the
-  keychain import, the App Store Connect notary key and the tap push are first exercised by the
-  first release that runs through Actions. That release is the measurement; its result belongs in
-  this section, next to v0.1.0's.
-- The **Keychain consent prompt on upgrade from a dev build**: the Slack token was written by a
-  differently-signed binary, so the first Developer-ID-signed launch asks once before reading
-  it. Expected behaviour, not a bug; a fresh install never sees it. The machine that cut v0.1.0
-  had no stored token at the time, so this path did not run.
-- Whether a **CI-signed** binary and a **locally-signed** one are interchangeable to the Keychain.
-  They carry the same certificate, so they should be — but "should be" is what this section exists
-  to stop us writing.
+- The **Keychain consent prompt on first launch of a differently-signed build**: the Slack token was
+  written by one binary and is read by another, so macOS may ask once before releasing it. v0.1.0 was
+  signed on the laptop and v0.2.0 on a runner — with the *same* certificate, so the designated
+  requirement should match and nothing should prompt. `brew upgrade` itself did not ask; whether the
+  first *launch* does is the open observation, and it needs a machine with a stored token.
+- **A `feat:`/`fix:` push releasing on its own.** Every release so far has been a
+  `workflow_dispatch` with an explicit version. The bump rule has 37 test cases and has been replayed
+  over this repo's history, but no version has yet been derived from a real merge.
+- **A second CI release**, where the only variable is a bumped version — the same gap v0.1.0 left,
+  one lane over.
 
 ## When something refuses
 
@@ -305,6 +333,7 @@ Still unmeasured, and left recorded rather than assumed:
 | The release job says `Already tagged` | A previous run died after tagging. Finish it with §7 from step 3 — do not re-run the workflow |
 | The release job says `Wrong identity` | The `.p12` in secrets is not a Developer ID Application certificate (an Apple Development one signs fine locally and is refused by every other Mac) |
 | The release job says `Missing secrets` and you did set them | `DEVELOPER_ID_P12_PASSWORD` is empty because the `.p12` was exported without a passphrase — re-export per §1.5 |
+| `security: SecKeychainItemImport: The user name or passphrase you entered is not correct.` | The two `DEVELOPER_ID_P12_*` secrets are not a matching pair. **Measured 2026-08-15**, and the cause is worth knowing: setting the passphrase from `pbpaste` is a trap, because anything copied between generating it and uploading it wins. Fix them together, verifying before you upload, so a mismatch cannot be stored twice: <br><pre>printf 'passphrase: '; read -rs PASS; echo<br>printf '%s' "$PASS" \| /usr/bin/openssl pkcs12 -in DeveloperID.p12 \\<br>  -nokeys -clcerts -passin stdin >/dev/null 2>&1 \\<br>  && { base64 -i DeveloperID.p12 \| tr -d '\n' \| gh secret set DEVELOPER_ID_P12_BASE64 --repo pmbrull/OnAir; \\<br>       printf '%s' "$PASS" \| gh secret set DEVELOPER_ID_P12_PASSWORD --repo pmbrull/OnAir; } \\<br>  \|\| echo "wrong passphrase — nothing changed"<br>unset PASS</pre> Nothing was published, so just re-dispatch afterwards |
 | `openssl` locally → `unsupported ... RC2-40-CBC` | OpenSSL 3 refusing Keychain's legacy cipher. Use `/usr/bin/openssl` or add `-legacy`; the export is fine and CI never sees this |
 | `codesign` → `errSecInternalComponent` | Keychain locked (common over SSH): `security unlock-keychain login.keychain-db` |
 | `notarytool` verdict `Invalid` | `xcrun notarytool log <submission-id> --keychain-profile onair-notary` — per-file reasons, usually a missing hardened runtime or timestamp |

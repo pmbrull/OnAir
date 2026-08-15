@@ -191,7 +191,12 @@ recording every load-bearing choice and the alternative it beat.
 - [x] Cut v0.1.0 — notarized by Apple first try, stapled, and installing from the tap
       ([runbook](docs/runbooks/release.md), ADR-0017). The brew line above is now the reality.
 - [x] Move the release lane into CI — a push to `main` derives the version, notarizes, publishes and
-      bumps the cask (ADR-0018). Its first real run is still the measurement.
+      bumps the cask (ADR-0018). **v0.2.0 shipped through Actions**, notarized first try, and
+      `brew upgrade` moved an installed app to it ([runbook](docs/runbooks/release.md)).
+- [ ] Let a real merge choose the version — every release so far passed `workflow_dispatch` an
+      explicit one, so the bump rule has never picked a shipped version by itself.
+- [ ] Protect `main`. Since ADR-0018 a push there signs and notarizes code, which makes
+      review-before-merge a code-signing control.
 - [x] Pick a LICENSE — MIT, chosen for the warranty and liability disclaimer.
 - [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
       carries an expiry (GAP-0001, GAP-0002).

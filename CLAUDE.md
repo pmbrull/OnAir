@@ -121,14 +121,17 @@ and `brew install --cask pmbrull/tap/onair` works from a clean tap. The README's
 reality, not the destination. What the release measured — and the two things it still did not — is
 in `docs/runbooks/release.md`.
 
-That lane has since moved into CI (**ADR-0018**): a push to `main` releases, and `make release` is
-the recovery path. What is measured today is the bump rule (37 cases) and the fact that the build
-targets are the same ones v0.1.0 shipped with. What is **not** measured is the CI lane end to end —
-the keychain import, the App Store Connect notary key and the tap push are first exercised by the
-first release that runs through Actions, and that release's result belongs in
-`docs/runbooks/release.md` next to v0.1.0's. Two commits already in this history
-(`56b5a66`, `b9ffb25`) would fail the version rule, which is the intended behaviour and worth
-knowing before writing a PR title.
+That lane has since moved into CI (**ADR-0018**), and **v0.2.0 shipped through Actions on
+2026-08-15** — the whole lane unattended, notarytool Accepted first try, the tap's `sha256` matching
+the published asset byte-for-byte, and `brew upgrade --cask` moving an installed app `0.1.0 -> 0.2.0`.
+`make release` is now the recovery path. The attempt before it failed at the certificate import and
+left no tag, no release, no plist bump and no cask change, which measured the ordering property more
+convincingly than the green run did. Both are in `docs/runbooks/release.md`.
+
+What is still **not** measured: a release derived from a real merge — every release so far has been a
+`workflow_dispatch` with an explicit version, so the 37-case bump rule has never actually chosen a
+shipped version. Two commits already in this history (`56b5a66`, `b9ffb25`) would fail that rule,
+which is the intended behaviour and worth knowing before writing a PR title.
 
 Three things reality has corrected so far, and all three were seen rather than reasoned.
 **ADR-0011**: the
