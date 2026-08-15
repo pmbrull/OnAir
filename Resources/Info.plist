@@ -2,36 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>OnAir</string>
 	<key>CFBundleDisplayName</key>
 	<string>OnAir</string>
 	<key>CFBundleExecutable</key>
 	<string>OnAir</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.umamidata.onair</string>
+	<key>CFBundleName</key>
+	<string>OnAir</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>15.0</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
+	<string>2</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 Pere Miquel Brull.</string>
-
-	<!-- Menu-bar only: no Dock icon, no app switcher entry. -->
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
 	<key>LSUIElement</key>
 	<true/>
-
-	<!-- Deliberately absent: NSCameraUsageDescription and NSMicrophoneUsageDescription.
-	     OnAir asks CoreMediaIO and CoreAudio whether a device is *running*; it never opens a
-	     stream, so macOS never prompts and no TCC grant exists to lose on rebuild (ADR-0001,
-	     invariant A5). If either key ever appears here, something started capturing. -->
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Pere Miquel Brull.</string>
 </dict>
 </plist>
