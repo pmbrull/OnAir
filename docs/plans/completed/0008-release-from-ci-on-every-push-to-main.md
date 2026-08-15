@@ -1,6 +1,6 @@
 # Plan 0008 — Release from CI on every push to main
 
-- Status: Active
+- Status: **Built**
 - Date: 2026-08-15
 - Input: ADR-0018 (which this plan proposed), superseding the "produced locally" half of ADR-0017
 
@@ -29,10 +29,12 @@ hand step and no second machine. The local lane stays exactly as it is, as the r
       (invariant A4's spirit; the release lane's version of it).
 - [ ] `docs/runbooks/release.md` describes the CI lane as the path and the local lane as the
       fallback, and lists the six secrets with where each comes from.
-- [ ] **Measured, not assumed:** the first CI release cuts a real version, notarytool Accepts it,
-      `brew upgrade` moves an installed OnAir to it. This cannot be checked before merge — it is
-      the release-after-merge, and its result is written back into
-      `docs/runbooks/release.md`, the same way v0.1.0's was.
+- [x] **Measured, not assumed:** the first CI release cuts a real version, notarytool Accepts it,
+      `brew upgrade` moves an installed OnAir to it. **v0.2.0, 2026-08-15**, run `31894635012`:
+      submission `15f8e1ed-be5c-42c9-b75a-820b07ce51a2` Accepted first try, `spctl` answers
+      `Notarized Developer ID` on the CI-signed artefact, the tap's `sha256` matches the published
+      asset byte-for-byte, and `brew upgrade --cask` moved an installed app `0.1.0 -> 0.2.0`. Written
+      back into `docs/runbooks/release.md`, the same way v0.1.0's was.
 
 ## Affected modules
 
@@ -126,3 +128,18 @@ No Swift changes. Nothing under `Sources/`, so invariants A1–A6 are untouched 
 - 2026-08-15 — This PR is titled `ci:` deliberately, so merging it does **not** fire a release
   before the six secrets exist. The first release is a `workflow_dispatch` with an explicit version,
   chosen rather than triggered.
+- 2026-08-15 — **Setup found three traps, none of them in the code.** The repo had all three GitHub
+  merge defaults that break "the PR title decides the version" (`COMMIT_OR_PR_TITLE`, merge commits,
+  rebase merges) — ADR-0018 had assumed a merge shape nobody had configured. Keychain Access exports
+  a `.p12` with an empty passphrase without complaint, which reads as "secret never set". And setting
+  the passphrase secret from `pbpaste` lost to whatever was copied next, which is what actually broke
+  the first release attempt. All three are now runbook steps or troubleshooting rows; two of them are
+  the kind of thing only a real run surfaces.
+- 2026-08-15 — **v0.2.0 shipped through Actions** (run `31894635012`, 2m40s), and the run before it
+  failed at the certificate import — which measured the ordering property for free: no tag, no
+  release, no plist bump, no cask change after a failed release. The plan's central safety claim was
+  tested by something going wrong, which is better evidence than the green run.
+- 2026-08-15 — The `security import` failure reported only
+  `SecKeychainItemImport: ... not correct.` and `exit code 1`, naming neither secret nor the fix. It
+  now emits a titled annotation. A lane a human only visits when it breaks should say the useful
+  thing at the moment it breaks.
