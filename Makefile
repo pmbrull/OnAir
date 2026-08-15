@@ -28,8 +28,8 @@ TEST_FLAGS ?= $(shell if ! xcrun -f xctest >/dev/null 2>&1 && [ -d "$(CLT_FRAMEW
   printf -- '--disable-xctest -Xswiftc -F -Xswiftc %s -Xlinker -rpath -Xlinker %s -Xlinker -rpath -Xlinker %s' \
     "$(CLT_FRAMEWORKS)" "$(CLT_FRAMEWORKS)" "$(CLT_LIB)"; fi)
 
-.PHONY: help verify build test fmt fmt-check lint arch references hooks doctor doctor-slack \
-        app run install purge-loopback uninstall clean icon dist notarize release
+.PHONY: help verify build test fmt fmt-check lint arch references version-rule hooks doctor \
+        doctor-slack app run install purge-loopback uninstall clean icon dist notarize release
 
 ## The release lane's targets write and then read the same artefacts; running them interleaved
 ## under -j would zip a bundle mid-signature. Nothing here benefits from parallel make anyway —
@@ -41,13 +41,19 @@ help: ## Show this help
 	  | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 ## The gate. Every blocking check, ordered so the cheapest failure surfaces first.
-verify: references arch fmt-check lint build test ## Run the full local gate
+verify: references arch version-rule fmt-check lint build test ## Run the full local gate
 
 references: ## ADR/GAP references resolve; records are indexed and their status matches their folder
 	@./scripts/check-references.sh
 
 arch: ## ARCHITECTURE.md invariants a grep can decide (A1, A2, A4, A5)
 	@./scripts/check-architecture.sh
+
+## The rule that decides what every push to main ships (ADR-0018). It is shell, so this table is
+## the only thing that type-checks it — and a wrong answer here is a wrong version number on a
+## signed, notarized, published artefact.
+version-rule: ## The release bump rule's table (scripts/next-version.sh)
+	@./scripts/check-next-version.sh
 
 hooks: ## Install the pre-commit hooks
 	@command -v pre-commit >/dev/null || { echo "pre-commit not installed: brew install pre-commit"; exit 1; }
@@ -145,6 +151,12 @@ DIST_DIR := .build/dist
 DIST_BUNDLE := $(DIST_DIR)/$(APP_NAME).app
 DIST_ZIP := $(DIST_DIR)/$(APP_NAME)-$(VERSION).zip
 NOTARY_PROFILE ?= onair-notary
+## How `notarize` proves who it is. The default is the local lane's keychain profile, unchanged.
+## CI has no keychain profile and no Apple ID: it overrides this with an App Store Connect API key
+## (`--key <file> --key-id <id> --issuer <id>`), which is revocable on its own and keeps the
+## maintainer's Apple ID out of Actions entirely (ADR-0018). Both drive this one target, so the
+## lane CI runs is the lane a human can run.
+NOTARY_AUTH ?= --keychain-profile $(NOTARY_PROFILE)
 DIST_SIGN_ID ?= $(shell security find-identity -v -p codesigning 2>/dev/null \
   | grep -oE '"Developer ID Application:[^"]*"' | head -1 | tr -d '"')
 ## `=`, not `:=` — deferred, so only the dist lane pays for the `security` shell-out. And
@@ -187,22 +199,25 @@ dist: ## Build, sign (hardened runtime) and zip the universal release artefact
 ## have already been written.
 notarize: ## Submit the dist zip to Apple, staple the bundle, assess, re-zip and re-checksum
 	@[ -f "$(DIST_ZIP)" ] || { echo "error: $(DIST_ZIP) not found — run 'make dist' first"; exit 1; }
-	xcrun notarytool submit "$(DIST_ZIP)" --keychain-profile "$(NOTARY_PROFILE)" --wait
+	xcrun notarytool submit "$(DIST_ZIP)" $(NOTARY_AUTH) --wait
 	xcrun stapler staple "$(DIST_BUNDLE)"
 	spctl --assess --type exec -vv "$(DIST_BUNDLE)"
 	@ditto -c -k --keepParent "$(DIST_BUNDLE)" "$(DIST_ZIP)"
 	@cd "$(DIST_DIR)" && shasum -a 256 "$(notdir $(DIST_ZIP))" > "$(notdir $(DIST_ZIP)).sha256"
 	@echo "notarized and stapled; the artefact to publish is $(DIST_ZIP)"
 
-release: dist notarize ## The whole lane, then the publish steps to run next
+## Since ADR-0018 this is the recovery lane, not the usual one: a push to main releases. Run it when
+## Actions is down, when a CI run died after it started tagging, or to release from a machine.
+release: dist notarize ## The whole lane locally, then the publish steps to run next
 	@echo
 	@echo "Artefact ready: $(DIST_ZIP)"
 	@echo "  sha256: $$(cut -d' ' -f1 < '$(DIST_ZIP).sha256')"
 	@echo
-	@echo "Next (docs/runbooks/release.md §5):"
+	@echo "Next (docs/runbooks/release.md §7):"
 	@echo "  git tag v$(VERSION) && git push origin v$(VERSION)"
 	@echo "  gh release create v$(VERSION) '$(DIST_ZIP)' --title 'OnAir $(VERSION)'"
-	@echo "  ./scripts/make-cask.sh   # paste the output into pmbrull/homebrew-tap"
+	@echo "  ./scripts/make-cask.sh && HOMEBREW_TAP_TOKEN=... ./scripts/publish-cask.sh"
+	@echo "  git commit -am 'chore(release): v$(VERSION)' && git push   # or the next release repeats it"
 
 install: app ## Copy the bundle into /Applications
 	@rm -rf "/Applications/$(APP_NAME).app"

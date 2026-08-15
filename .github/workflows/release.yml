@@ -1,0 +1,283 @@
+name: release
+
+# A merged PR is the release (ADR-0018). Every push to main verifies the tree, derives the next
+# version from the commit subject, builds and notarizes the universal artefact, publishes the
+# GitHub release and pushes the regenerated cask to pmbrull/homebrew-tap.
+#
+# The ordering is the safety property: NOTHING outside this runner is touched until notarization has
+# passed. The plist bump lives in the working tree; the commit, the tag, the release and the tap
+# push all come after `notarytool` and `spctl` have returned. A failure before that point leaves no
+# bumped version, no orphan tag and no half-updated tap — see docs/runbooks/release.md for the
+# manual recovery path when it fails *after*.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (X.Y.Z). Empty derives it from the commit subject."
+        required: false
+        type: string
+
+# Queue, never cancel: a run cancelled between `notarytool` and the tap push is the one state this
+# lane cannot clean up after itself.
+#
+# The group name must NOT be one verify.yml can compute for itself. Called from here it groups on
+# `${{ github.workflow }}-${{ github.ref }}` — which is the *caller's* workflow name, so
+# "release-refs/heads/main". If these two strings ever met, this run would queue behind its own gate
+# and neither would ever start.
+concurrency:
+  group: release-lane
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The same gate a PR runs, called rather than copied — a release can never be cut from a tree that
+  # has not passed it. verify.yml dropped its own push-to-main trigger for this (ADR-0018).
+  gate:
+    uses: ./.github/workflows/verify.yml
+
+  # macos-15 for a two-second job because PlistBuddy is the ONE reader of the version in this repo
+  # (ADR-0017) and it is macOS-only. Re-parsing Info.plist with Python on a Linux runner would be a
+  # second reader, which is how the version drifts from the artefact that carries it.
+  decide:
+    name: decide the next version
+    runs-on: macos-15
+    outputs:
+      version: ${{ steps.rule.outputs.version }}
+      release: ${{ steps.rule.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The bump commit pushes to main, so releasing from anywhere else would push one branch's
+      # version onto another's history.
+      #
+      # `$GITHUB_REF`, not `${{ github.ref }}`: workflow_dispatch can run this on any ref, and a
+      # branch name is not a safe thing to expand into a shell.
+      - name: Refuse to release from anything but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error title=Wrong ref::release runs on main only; got $GITHUB_REF"
+          exit 1
+
+      - id: rule
+        name: Derive the version
+        # The commit subject and the dispatch input are attacker-controlled text as far as this
+        # runner is concerned. Neither is ever interpolated into a shell script: the message is
+        # read from git into a file, the input arrives as an environment variable, and both are
+        # quoted. A `${{ }}` in a commit message must be data, not code.
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          current=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
+          echo "the plist currently says $current"
+
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            if ! printf '%s' "$INPUT_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error title=Bad version input::'$INPUT_VERSION' is not X.Y.Z"
+              exit 1
+            fi
+            echo "version=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Version::$INPUT_VERSION, given explicitly by workflow_dispatch"
+            exit 0
+          fi
+
+          git log -1 --pretty=%B > "$RUNNER_TEMP/commit-message"
+          set +e
+          next=$(./scripts/next-version.sh "$current" "$RUNNER_TEMP/commit-message")
+          code=$?
+          set -e
+          case $code in
+            0)
+              echo "version=$next" >> "$GITHUB_OUTPUT"
+              echo "release=true" >> "$GITHUB_OUTPUT"
+              echo "::notice title=Version::releasing $next (was $current)"
+              ;;
+            3)
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              echo "::notice title=No release::this commit changes nothing a user installs; staying on $current"
+              ;;
+            *)
+              echo "::error title=Undecidable version::the commit subject is not a Conventional Commit, so no bump can be derived. Amend it, or dispatch this workflow with an explicit version — ADR-0018."
+              exit 1
+              ;;
+          esac
+
+  release:
+    name: build, notarize, publish
+    needs: [gate, decide]
+    if: needs.decide.outputs.release == 'true'
+    runs-on: macos-15
+    permissions:
+      contents: write # the bump commit, the tag and the GitHub release
+    env:
+      VERSION: ${{ needs.decide.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, for the already-released guard and for --generate-notes
+
+      - name: Refuse if this version already exists
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error title=Already tagged::v$VERSION exists. If a previous run died after tagging, finish it by hand — docs/runbooks/release.md."
+            exit 1
+          fi
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "::error title=Already released::a GitHub release v$VERSION exists."
+            exit 1
+          fi
+
+      # An ephemeral keychain under $RUNNER_TEMP, deleted in the `if: always()` step below. This is
+      # NOT the loopback key that invariant A6 is about (that one never enters a keychain at all,
+      # ADR-0016) — it is the Developer ID signing identity, which has to be in one for `codesign`
+      # to find it, and this keychain dies with the runner.
+      - name: Import the Developer ID identity
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${P12_BASE64:-}" ] || [ -z "${P12_PASSWORD:-}" ]; then
+            echo "::error title=Missing secrets::DEVELOPER_ID_P12_BASE64 and DEVELOPER_ID_P12_PASSWORD are required — docs/runbooks/release.md §5."
+            exit 1
+          fi
+
+          keychain="$RUNNER_TEMP/onair-signing.keychain-db"
+          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+
+          security create-keychain -p "$password" "$keychain"
+          # No auto-lock and no timeout: `notarytool --wait` can outlast the 5-minute default, and a
+          # keychain that relocks mid-lane fails `codesign` with errSecInternalComponent.
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+
+          p12="$RUNNER_TEMP/developer-id.p12"
+          # `tr -d '\n' | openssl base64 -d -A` handles the secret whether it was pasted as one line
+          # or wrapped; BSD base64's flags differ from GNU's, so openssl does the decoding.
+          printf '%s' "$P12_BASE64" | tr -d '\n' | openssl base64 -d -A > "$p12"
+          security import "$p12" -k "$keychain" -P "$P12_PASSWORD" -f pkcs12 \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+
+          # `make dist` finds the identity through `security find-identity`, which only searches the
+          # user's keychain list — so the temp keychain has to join it, ahead of the rest.
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+          if ! security find-identity -v -p codesigning | grep -q 'Developer ID Application:'; then
+            security find-identity -v -p codesigning || true
+            echo "::error title=Wrong identity::the imported certificate is not a 'Developer ID Application' one. Gatekeeper rejects anything else on every other Mac (ADR-0017) — refusing rather than shipping it."
+            exit 1
+          fi
+          security find-identity -v -p codesigning | grep 'Developer ID Application:'
+
+      # Working tree only. Nothing is committed until the artefact exists and Apple has accepted it.
+      - name: Bump the version in the working tree
+        run: ./scripts/bump-version.sh "$VERSION"
+
+      - name: Build the signed universal artefact
+        run: make dist
+
+      - name: Notarize and staple
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NOTARY_KEY_P8:-}" ] || [ -z "${NOTARY_KEY_ID:-}" ] || [ -z "${NOTARY_ISSUER_ID:-}" ]; then
+            echo "::error title=Missing secrets::NOTARY_API_KEY_P8, NOTARY_API_KEY_ID and NOTARY_API_ISSUER_ID are required — docs/runbooks/release.md §5."
+            exit 1
+          fi
+          key="$RUNNER_TEMP/notary.p8"
+          printf '%s' "$NOTARY_KEY_P8" > "$key"
+          chmod 600 "$key"
+          # Exported, not passed as `make NOTARY_AUTH=...`: make reads variables from the
+          # environment and `?=` yields to them, which keeps the key id and issuer out of the
+          # process table. The target itself is the one a human runs locally.
+          export NOTARY_AUTH="--key $key --key-id $NOTARY_KEY_ID --issuer $NOTARY_ISSUER_ID"
+          trap 'rm -f "$key"' EXIT
+          make notarize
+
+      # Past this line the lane mutates things outside the runner.
+      - name: Commit the bump and tag it
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # `[skip ci]` is the belt; the braces are that a push authenticated with GITHUB_TOKEN does
+          # not trigger workflows at all. Two guards because a loop here notarizes in a circle.
+          #
+          # The path is named rather than `commit -a`: the plist is the only thing this lane is
+          # allowed to change, and a release commit that quietly carried something a build step
+          # wrote would be invisible in the release notes.
+          git commit -m "chore(release): v$VERSION [skip ci]" -- Resources/Info.plist
+          git tag "v$VERSION"
+          git push origin "HEAD:refs/heads/main"
+          git push origin "v$VERSION"
+
+      - name: Publish the GitHub release
+        run: |
+          set -euo pipefail
+          zip=".build/dist/OnAir-$VERSION.zip"
+          test -f "$zip"
+          gh release create "v$VERSION" "$zip" \
+            --title "OnAir $VERSION" \
+            --generate-notes \
+            --verify-tag
+
+      # Renders from the PUBLISHED asset (no --local), so the cask's sha256 cannot drift from the
+      # zip users actually fetch — ditto zips are not byte-stable across rebuilds.
+      - name: Update the cask in the tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "::error title=Missing secret::HOMEBREW_TAP_TOKEN is required to push the cask. The release is published; only the tap is behind — docs/runbooks/release.md."
+            exit 1
+          fi
+          # A just-created release asset is not always downloadable on the first try, and the whole
+          # point of hashing the published asset is defeated if a few seconds of eventual
+          # consistency leaves users on the old cask.
+          for attempt in 1 2 3; do
+            if ./scripts/make-cask.sh; then break; fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error title=Asset not downloadable::the release v$VERSION is published but its asset could not be fetched to hash. Finish the tap by hand — docs/runbooks/release.md §7.5."
+              exit 1
+            fi
+            echo "the asset is not downloadable yet; retrying in 10s (attempt $attempt)"
+            sleep 10
+          done
+          ./scripts/publish-cask.sh
+
+      - name: Summary
+        run: |
+          {
+            echo "## OnAir $VERSION"
+            echo
+            echo "- sha256: \`$(cut -d' ' -f1 < ".build/dist/OnAir-$VERSION.zip.sha256")\`"
+            echo "- archs: \`$(lipo -archs .build/dist/OnAir.app/Contents/MacOS/OnAir)\`"
+            echo "- release: https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION"
+            echo "- cask: https://github.com/pmbrull/homebrew-tap/blob/main/Casks/onair.rb"
+            echo
+            echo '```'
+            echo "brew update && brew upgrade --cask pmbrull/tap/onair"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete the signing keychain
+        if: always()
+        run: |
+          [ -n "${KEYCHAIN:-}" ] || exit 0
+          security delete-keychain "$KEYCHAIN" 2> /dev/null || true
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/notary.p8"

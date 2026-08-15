@@ -1,6 +1,11 @@
 # ADR-0017 — Distribute through a personal Homebrew tap, as a notarized zip, released locally
 
-- Status: Accepted
+- Status: Accepted; the **"produced locally"** half superseded by
+  [ADR-0018](0018-release-from-ci-on-every-push-to-main.md) (2026-08-15). The channel this ADR chose
+  — a personal tap, a notarized stapled zip, no DMG, no Sparkle — stands unchanged, as does the
+  local `make release` lane, now the recovery path. What changed is who runs it: every push to main.
+  The "CI-held signing key" alternative below is the one that was reopened, and the reasoning
+  against it is still worth reading before trusting the reversal.
 - Date: 2026-08-14
 
 ## Context

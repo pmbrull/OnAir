@@ -62,5 +62,5 @@ machine, and no unit test in the world would have caught it.
 | `status_expiration` **of OnAir's own choosing** as a crash net (it does carry back one it read — ADR-0015) | a stranded status actually happens (ADR-0009) |
 | Screen-sharing detection | the camera signal misses enough presentations to notice |
 | Auto-update (Sparkle, its feed and its keys) | `brew upgrade` stops being how this audience updates (ADR-0017) |
-| CI-held release signing | a second maintainer needs to cut a release (ADR-0017) |
+| ~~CI-held release signing~~ | **built** — ADR-0018 reversed ADR-0017's rejection; every push to `main` releases |
 | Do Not Disturb alongside the status | wanting it, and accepting the extra `dnd:write` scope |

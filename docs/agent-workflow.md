@@ -11,6 +11,11 @@ mistakes — a dangling ADR/GAP reference, a broken invariant, unformatted code,
 suite and the bundle assembly. Neither replaces step 3: the device journey tests need real capture
 hardware, and CI has none.
 
+One thing the loop's last step now means more than it did: since ADR-0018, **merge is release**. The
+same push that lands the change derives a version from its commit subject, notarizes, publishes and
+updates the tap — so the PR title is a shipped artefact, and `merge` is the point of no return rather
+than `git tag`.
+
 ## The loop
 
 ```
