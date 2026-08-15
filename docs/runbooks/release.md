@@ -153,6 +153,24 @@ then.
   changes per release.
 - **First-run UX.** A brew-installed user's first Connect still hits the self-signed-certificate
   warning; [first-run.md](first-run.md) is the page to link from release notes.
+- **Squash-only merges, titled from the PR.** The bump rule reads the subject of the commit that
+  lands on `main`, so which commit that is has to be predictable:
+
+  ```bash
+  gh api -X PATCH repos/pmbrull/OnAir \
+    -F allow_squash_merge=true -F squash_merge_commit_title=PR_TITLE \
+    -F squash_merge_commit_message=COMMIT_MESSAGES \
+    -F allow_merge_commit=false -F allow_rebase_merge=false
+  ```
+
+  Three separate traps, all closed by that one call. GitHub's default
+  `squash_merge_commit_title=COMMIT_OR_PR_TITLE` uses the **commit** subject when a PR holds exactly
+  one commit and the **PR title** when it holds several — so the same PR title would decide the
+  version or not depending on how many times you committed. A **merge commit** yields
+  `Merge pull request #12 from …`, which carries no type at all and fails the job. A **rebase merge**
+  puts every branch commit on `main` and the rule reads only the last one, silently ignoring the
+  `feat:` three commits back. Squash, titled from the PR, is the only shape where the version follows
+  from something you deliberately wrote.
 - **Branch protection on `main`.** Since ADR-0018, a push to `main` signs and notarizes code as you.
   That makes review-before-merge a code-signing control, not only a code-review one. Named here
   because the ADR names it as follow-up and does not do it.
@@ -283,6 +301,7 @@ Still unmeasured, and left recorded rather than assumed:
 |---|---|
 | The release job says `Undecidable version` | The squashed commit subject is not a Conventional Commit. Nothing was published. Amend the subject on a follow-up, or dispatch the workflow with an explicit version |
 | …and the subject is `Merge pull request #N from …` | The PR was merged with a merge commit rather than squashed. GitHub writes that subject, and no rule can read a version out of it — squash-merge, or dispatch with an explicit version |
+| …and the subject is a commit subject you wrote, not the PR title | `squash_merge_commit_title` is still `COMMIT_OR_PR_TITLE`, which prefers the commit subject on a one-commit PR — §4 has the `gh api` call that pins it to `PR_TITLE` |
 | The release job says `Already tagged` | A previous run died after tagging. Finish it with §7 from step 3 — do not re-run the workflow |
 | The release job says `Wrong identity` | The `.p12` in secrets is not a Developer ID Application certificate (an Apple Development one signs fine locally and is refused by every other Mac) |
 | The release job says `Missing secrets` and you did set them | `DEVELOPER_ID_P12_PASSWORD` is empty because the `.p12` was exported without a passphrase — re-export per §1.5 |

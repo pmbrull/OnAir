@@ -70,7 +70,9 @@ passed, so a failed build leaves no bumped version and no orphan tag.
    back with `recordApplied` / `recordSkipped` / `recordRestored` / `recordFailed`, the engine
    assumes nothing happened and offers the same intent again. That is the retry, and it is why a
    failure path that silently advances the state machine strands a status.
-7. **The PR title decides the released version.** It becomes the squashed commit subject, and
+7. **The PR title decides the released version** — squash-merged, with
+   `squash_merge_commit_title=PR_TITLE` set on the repo (runbook §4; GitHub's default would use your
+   commit subject instead on a one-commit PR). It becomes the squashed commit subject, and
    `scripts/next-version.sh` reads it: `feat:` ships a minor, `fix:`/`perf:`/`revert:` a patch,
    `docs:`/`chore:`/`ci:`/`test:`/`refactor:`/`style:`/`build:` ship nothing at all. A subject that is
    not a Conventional Commit **fails the release job** rather than defaulting to a patch (ADR-0018).
