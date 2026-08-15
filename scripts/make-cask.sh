@@ -38,7 +38,7 @@ if [ "$mode" = published ]; then
     trap 'rm -rf "$tmp"' EXIT
     gh release download "v${version}" --pattern "$zip_name" --dir "$tmp" || {
         echo "error: no release v${version} with ${zip_name} on GitHub — publish it first" >&2
-        echo "       (docs/runbooks/release.md §5.4), or use --local for lane testing." >&2
+        echo "       (docs/runbooks/release.md §7.4), or use --local for lane testing." >&2
         exit 1
     }
     zip="$tmp/$zip_name"

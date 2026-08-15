@@ -1,14 +1,20 @@
 name: verify
 
+# No `push: branches: [main]`. Since ADR-0018 every push to main runs release.yml, which calls this
+# workflow as its gate — so a push-to-main trigger here would build the whole macOS job twice for
+# one signal, and a release could otherwise be cut in parallel with the gate rather than after it.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
-  group: verify-${{ github.ref }}
-  cancel-in-progress: true
+  # `github.workflow` rather than a literal: when release.yml calls this, the group must be the
+  # caller's, or a release would queue behind the PR run that produced the same ref.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Superseding a PR run is free; superseding a release's gate would cancel a run that is about to
+  # sign and notarize, so only the pull_request path cancels.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

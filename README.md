@@ -180,7 +180,7 @@ so the suite is written against Swift Testing and `make test` supplies the searc
 not. [`docs/dev-loop.md`](docs/dev-loop.md) has the details.
 
 The repo carries its own working agreement — [`CLAUDE.md`](CLAUDE.md),
-[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with sixteen ADRs
+[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with eighteen ADRs
 recording every load-bearing choice and the alternative it beat.
 
 ## TODO
@@ -190,6 +190,8 @@ recording every load-bearing choice and the alternative it beat.
       and `make doctor-slack` came back with a real profile (GAP-0002).
 - [x] Cut v0.1.0 — notarized by Apple first try, stapled, and installing from the tap
       ([runbook](docs/runbooks/release.md), ADR-0017). The brew line above is now the reality.
+- [x] Move the release lane into CI — a push to `main` derives the version, notarizes, publishes and
+      bumps the cask (ADR-0018). Its first real run is still the measurement.
 - [x] Pick a LICENSE — MIT, chosen for the warranty and liability disclaimer.
 - [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
       carries an expiry (GAP-0001, GAP-0002).

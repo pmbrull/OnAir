@@ -16,7 +16,9 @@ make purge-loopback # list the loopback keys stranded in the login keychain befo
 make icon           # regenerate Resources/AppIcon.icns from scripts/make-icon.swift
 make dist           # release build → Developer ID sign → universal zip; refuses without the identity
 make notarize       # submit the dist zip to Apple, staple, assess, re-zip
-make release        # dist + notarize — the walkthrough is docs/runbooks/release.md
+make release        # dist + notarize, locally — the recovery lane since ADR-0018 moved releases
+                    # into CI; docs/runbooks/release.md
+make version-rule   # the release bump rule's table (scripts/next-version.sh, ADR-0018)
 make uninstall      # remove the app, its Keychain items and its support directory
 ```
 
@@ -153,6 +155,15 @@ That fallback chain is for the local bundle only. The release lane is the opposi
 ad-hoc signature Gatekeeper would reject on every other Mac (ADR-0017). To exercise the lane on a
 machine without the certificate, `make dist DIST_SIGN_ID=-`; the walkthrough is
 [`runbooks/release.md`](runbooks/release.md).
+
+Since ADR-0018 that identity usually lives on a CI runner, not here: every push to `main` runs
+`.github/workflows/release.yml`, which imports the certificate into an ephemeral keychain, builds,
+notarizes, publishes and pushes the cask. Two consequences for a local loop. **Your commit subject
+is load-bearing** — it decides the version, and a subject that is not a Conventional Commit fails
+the release job (`make version-rule` is the rule's table; `scripts/next-version.sh 0.1.0 -` answers
+for any message on stdin). And **`Resources/Info.plist` is written by CI**, so a hand-edited version
+on a branch will conflict with the bump commit; use `scripts/bump-version.sh` only on the manual
+lane.
 
 ## Residue
 
