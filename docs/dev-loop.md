@@ -73,8 +73,13 @@ Engine
 Slack
   client id             built-in shared app
   user credential       present in the Keychain
-  redirect URL          https://localhost:51234/callback
+  redirect URL          https://onair.pmbrull.me/callback/
+  callback port         51234 (loopback, plain HTTP)
 ```
+
+The `redirect URL` row is the string registered with Slack — a page in `site/`, not this machine
+(ADR-0019). The `callback port` under it is where that page hands the callback back; invariant A7
+fails the build if the two ever disagree.
 
 The `client id` row names where the id Connect would use comes from: `built-in shared app` once
 `SlackOAuth.builtInClientID` is filled, `your own app's (pasted)` when an override shadows it, or
@@ -167,15 +172,20 @@ lane.
 
 ## Residue
 
-The loopback certificate lives at `~/Library/Application Support/OnAir/loopback.p12`, and the
-Keychain items under `io.umamidata.onair` — the user token, plus a client id override if you
-pasted one (ADR-0012). `make uninstall` removes the certificate and both Keychain accounts;
-deleting the bundle alone leaves a live Slack token behind.
+What OnAir leaves on a machine is the Keychain items under `io.umamidata.onair` — the user token,
+plus a client id override if you pasted one (ADR-0012). `make uninstall` removes both accounts and
+the support directory; deleting the bundle alone leaves a live Slack token behind.
 
-**If you ran the gate before ADR-0016, you have more residue than that.** `SecPKCS12Import` on
-macOS imports into the login keychain unless told not to, so every `make verify` used to leave a
+**Two kinds of residue predate ADR-0019, and neither is created any more.**
+
+A `loopback.p12` at `~/Library/Application Support/OnAir/` on any machine that connected before the
+callback moved to a hosted page. Nothing reads it now — `make uninstall` takes the whole directory,
+or delete the file on its own.
+
+And, if you ran the gate before ADR-0016, keys in your **login keychain**. `SecPKCS12Import` on
+macOS imports into it unless told not to, so every `make verify` used to leave a
 `CN=localhost, O=OnAir` certificate and its private key there permanently — 268 of them on the
 machine where this was found, four unrelated keys on the same machine for comparison. Those keys
 are why macOS started asking for the login password on OnAir's behalf. `make purge-loopback` lists
 them and `./scripts/purge-loopback-keychain.sh --apply` removes them; `make uninstall` applies it
-too. New ones are no longer created, and invariant A6 fails the build if that changes.
+too. Invariant A6 now fails the build on any PKCS#12 import at all, so nothing can start again.

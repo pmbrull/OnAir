@@ -82,13 +82,19 @@ public enum SlackOAuth {
         "dnd:read", "dnd:write",
     ]
 
-    /// Fixed, because it has to match the Redirect URL registered in the Slack app. A port picked
-    /// at random each launch could not be registered in advance.
+    /// Fixed, because the relay page hands the callback to exactly this port. The page ships from
+    /// this repository for that reason, and `.github/workflows/pages.yml` refuses to deploy one
+    /// that disagrees with this line.
     public static let defaultPort: UInt16 = 51234
 
-    public static func redirectURI(port: UInt16 = defaultPort) -> String {
-        "https://localhost:\(port)\(LoopbackReceiver.callbackPath)"
-    }
+    /// The Redirect URL registered in the Slack app — a page on the public internet, not this
+    /// machine. It forwards `code` and `state` to `defaultPort` on the loopback, which is what lets
+    /// the listener speak plain HTTP and the browser show no warning (ADR-0019).
+    ///
+    /// The trailing slash is load-bearing twice over: it is the path GitHub Pages actually serves
+    /// (the unslashed form is a 301), and Slack compares this string byte for byte against the
+    /// registration — at authorize *and* again at the exchange.
+    public static let redirectURI = "https://onair.pmbrull.me/callback/"
 
     /// 256 bits from the system CSPRNG. This is the only thing standing between the listener and a
     /// code planted by a page the user happens to have open, so it is not `UUID()`.
@@ -190,7 +196,7 @@ public enum SlackOAuth {
     }
 }
 
-/// One authorisation attempt, from minting the certificate to holding the token. The PKCE pair is
+/// One authorisation attempt, from opening the port to holding the token. The PKCE pair is
 /// generated here and lives exactly as long as the attempt.
 ///
 /// The kit does everything except open the browser: `NSWorkspace` is AppKit, and a kit that
@@ -214,7 +220,6 @@ public struct SlackOAuthSession: Sendable {
 
     public init(
         clientID: String,
-        supportDirectory: URL,
         port: UInt16 = SlackOAuth.defaultPort,
         baseURL: URL = SlackClient.productionAPI,
         session: URLSession = .shared
@@ -223,7 +228,7 @@ public struct SlackOAuthSession: Sendable {
         guard !trimmed.isEmpty else { throw Failure.noClientID }
         let state = SlackOAuth.newState()
         let pkce = PKCE()
-        let redirectURI = SlackOAuth.redirectURI(port: port)
+        let redirectURI = SlackOAuth.redirectURI
         guard let url = SlackOAuth.authorizationURL(
             clientID: trimmed,
             redirectURI: redirectURI,
@@ -240,10 +245,7 @@ public struct SlackOAuthSession: Sendable {
         self.baseURL = baseURL
         self.session = session
         authorizationURL = url
-        receiver = try LoopbackReceiver(
-            port: port,
-            identity: LoopbackIdentity.loadOrCreate(in: supportDirectory)
-        )
+        receiver = LoopbackReceiver(port: port)
     }
 
     /// Waits for the browser, then exchanges the code. Five minutes is long enough to find the

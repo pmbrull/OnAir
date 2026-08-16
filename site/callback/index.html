@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connecting to OnAir</title>
+    <!-- The query string carries a one-time Slack authorisation code. Keeping it out of search
+         indexes and out of the Referer header is free, so it is done. The code is useless on its
+         own — the PKCE verifier never leaves the Mac — but a URL that is neither indexed nor
+         forwarded is one fewer place it can turn up. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>OnAir<span class="dot">.</span></h1>
+
+      <p class="lede" id="lede">Reading the callback…</p>
+
+      <div class="card" id="handoff" hidden>
+        <p class="muted">
+          Your browser should return to OnAir on its own. If nothing happens, OnAir is probably not
+          running — open it, press <strong>Connect to Slack</strong> again, or use the link below.
+        </p>
+        <p><a id="continue" href="#">Continue to OnAir</a></p>
+      </div>
+
+      <div class="card" id="idle" hidden>
+        <p class="muted">
+          This page only does something when Slack sends you to it, at the end of
+          <strong>Connect to Slack</strong> in OnAir's Settings. Start there.
+        </p>
+      </div>
+
+      <p class="muted" id="note" hidden>
+        Nothing here is stored, and nothing is sent anywhere. This page hands Slack's answer to the
+        copy of OnAir running on your Mac, which completes the exchange itself.
+      </p>
+
+      <p class="muted"><a href="../">About OnAir</a></p>
+    </main>
+
+    <script>
+      // Slack's OAuth redirect lands here, and this page hands it straight back to OnAir.
+      //
+      // Slack refuses to register an `http://` redirect URL, with no localhost exception. Pointing
+      // it at a loopback listener therefore meant a self-signed certificate and a browser warning
+      // on every connection. Bouncing off this page removes both: Slack redirects to a real HTTPS
+      // origin with a real certificate, and the last hop — here to `http://127.0.0.1:51234/callback`
+      // — is a top-level navigation, which is not subject to mixed-content rules.
+      (function () {
+        "use strict";
+
+        // Fixed, because OnAir's listener has to be bound before the browser is opened.
+        var DEFAULT_PORT = 51234;
+
+        // Loopback only, and a constant, so this page can never be turned into an open redirect.
+        var LOOPBACK_HOST = "http://127.0.0.1";
+        var CALLBACK_PATH = "/callback";
+
+        // Only these travel onward. Anything else Slack appends is dropped rather than forwarded
+        // blind at a listener that is deciding whether to trust it.
+        var FORWARDED = ["code", "state", "error", "error_description"];
+
+        // OnAir appends `.<port>` to the state it generated when it could not have 51234, so a
+        // second instance or a taken port is still reachable. The state is forwarded whole either
+        // way — OnAir compares it byte for byte against what it sent, so this must not rewrite it.
+        function portFromState(state) {
+          if (!state) return DEFAULT_PORT;
+          var suffix = state.split(".")[1];
+          if (!suffix || !/^[0-9]+$/.test(suffix)) return DEFAULT_PORT;
+          var port = Number(suffix);
+          return port >= 1024 && port <= 65535 ? port : DEFAULT_PORT;
+        }
+
+        function show(id) {
+          document.getElementById(id).hidden = false;
+        }
+
+        var params = new URLSearchParams(window.location.search);
+        var code = params.get("code");
+        var declined = params.get("error");
+
+        if (!code && !declined) {
+          document.getElementById("lede").textContent = "There is nothing here to hand back.";
+          show("idle");
+          return;
+        }
+
+        var forwarded = new URLSearchParams();
+        for (var i = 0; i < FORWARDED.length; i++) {
+          var value = params.get(FORWARDED[i]);
+          if (value !== null) forwarded.set(FORWARDED[i], value);
+        }
+        var target =
+          LOOPBACK_HOST +
+          ":" +
+          portFromState(params.get("state")) +
+          CALLBACK_PATH +
+          "?" +
+          forwarded.toString();
+
+        document.getElementById("lede").textContent = declined
+          ? "Slack did not authorise OnAir. Telling the app, so it stops waiting."
+          : "Slack said yes. Handing this back to OnAir on your Mac…";
+        document.getElementById("continue").href = target;
+        show("handoff");
+        show("note");
+
+        // `replace`, not `assign`: the code stays out of the back button's history. The short delay
+        // is so the page is on screen before it leaves — otherwise a refused connection looks like
+        // Slack's own error rather than OnAir not running.
+        window.setTimeout(function () {
+          window.location.replace(target);
+        }, 400);
+      })();
+    </script>
+  </body>
+</html>

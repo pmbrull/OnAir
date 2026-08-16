@@ -1,0 +1,51 @@
+name: pages
+
+# `site/` is the OAuth redirect target (ADR-0019), not decoration: Slack sends the browser to
+# https://onair.pmbrull.me/callback/ and that page hands the code back to the app. So this deploys
+# on any change to it — including a change that arrives with a release, since a page that lags the
+# port or the state format it is relaying fails a login with no error anyone can read.
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Not `cancel-in-progress`. Superseding a deploy mid-flight can leave the live site on the older
+# artefact while main has moved, and this site is load-bearing for connecting to Slack.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy the callback relay
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # There is no build step by design (ADR-0019): the relay is plain HTML and JavaScript, so the
+      # thing served is the thing in the repository. Invariant A7 is what a build would otherwise
+      # have caught — every file the redirect URL depends on exists, and the port and path the page
+      # hands back to are the ones the app is listening on. It needs no toolchain, so it runs here
+      # as well as in the gate: this job can deploy on a push whose gate is still running.
+      - name: A7 — the relay page and the listener agree
+        run: ./scripts/check-architecture.sh
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,9 +1,16 @@
 # ADR-0016 — The loopback key never touches a keychain
 
-- Status: Accepted
+- Status: **Superseded by [ADR-0019](0019-the-callback-lands-on-a-page-we-host.md)** — there is no
+  longer a loopback key to keep out of a keychain, because there is no longer a certificate. The
+  invariant it created survives in stronger form: A6 is now "OnAir imports no PKCS#12 archive at
+  all", checked so that a future TLS listener cannot quietly bring the problem back.
 - Date: 2026-08-14
 - Extends: [ADR-0005](0005-oauth-over-a-self-signed-https-loopback.md),
   [ADR-0006](0006-the-token-lives-in-the-keychain.md)
+
+> Kept in full rather than trimmed: the failure below — 268 private keys and a login-password
+> prompt a week — is the most expensive thing this repository has learned from a real machine, and
+> the reason A6 still exists after its cause was deleted.
 
 ## Context
 

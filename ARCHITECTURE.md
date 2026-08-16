@@ -78,18 +78,27 @@ and `CMIODeviceStartStream` are build failures anywhere in `Sources/`, and an
 bundle's plist, because this property has to hold in the shipped artefact and not only in the
 sources. It is the whole reason OnAir needs no permission (ADR-0001).
 
-**A6 — The loopback key never touches a keychain.** `SecPKCS12Import` must pass
-`kSecImportToMemoryOnly`; without it, macOS imports the certificate *and its private key* into the
-login keychain on every distinct archive, and each deposited key's ACL names the binary that
-imported it — so a rebuilt OnAir makes macOS ask the user for their login password. Measured before
-the fix: 268 stranded keys on one machine, most of them minted by `make verify` itself. This is the
-mirror of A4 rather than an exception to it: A4 puts the *token* in the Keychain and nowhere else;
-A6 keeps the loopback key in process memory and nowhere else, because it is not a credential — its
-passphrase is a constant in the source, and its only job is to authenticate `localhost` to this
-machine's own browser for the seconds a callback is in flight (ADR-0005, ADR-0016).
+**A6 — OnAir imports no PKCS#12 archive.** `SecPKCS12Import` anywhere in `Sources/` is a build
+failure. It used to be the weaker "must pass `kSecImportToMemoryOnly`", because OnAir minted a
+`localhost` certificate for its OAuth listener; without that option macOS imports the certificate
+*and its private key* into the login keychain on every distinct archive, and each deposited key's
+ACL names the binary that imported it — so a rebuilt OnAir makes macOS ask the user for their login
+password. Measured before the fix: 268 stranded keys on one machine, most of them minted by
+`make verify` itself. Since ADR-0019 there is no certificate at all, so the check guards a
+*reintroduction*: a future TLS listener would bring the whole failure back with it (ADR-0016,
+ADR-0019).
 
-A1, A2, A4, A5 and A6 are decided by `./scripts/check-architecture.sh`, which runs in `make verify`,
-in the pre-commit hooks, and in CI. A3 is decided by `architecture-reviewer`.
+**A7 — The relay page and the listener agree.** Slack's Redirect URL is a page in `site/`, served
+at the domain in `site/CNAME` (ADR-0019). The port it hands the callback back to must be
+`SlackOAuth.defaultPort`, the path must be `LoopbackReceiver.callbackPath`, and
+`SlackOAuth.redirectURI` must name that domain. Every one of those values lives in exactly two
+files, and a mismatch fails a login with an error that names neither OnAir nor the reason — a
+browser error page on a port nothing is listening on. The page ships from this repository so the
+two *can* be checked together; A7 is what does the checking.
+
+A1, A2, A4, A5, A6 and A7 are decided by `./scripts/check-architecture.sh`, which runs in
+`make verify`, in the pre-commit hooks, in CI, and in the Pages deploy. A3 is decided by
+`architecture-reviewer`.
 
 ## Data flow, one meeting
 

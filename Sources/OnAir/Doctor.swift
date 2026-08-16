@@ -125,7 +125,8 @@ enum Doctor {
         print("  \(pad("client id", 22))\(clientID)")
         let hasStored = TokenStore.token() != nil
         print("  \(pad("user credential", 22))\(hasStored ? "present in the Keychain" : "missing")")
-        print("  \(pad("redirect URL", 22))\(SlackOAuth.redirectURI())")
+        print("  \(pad("redirect URL", 22))\(SlackOAuth.redirectURI)")
+        print("  \(pad("callback port", 22))\(SlackOAuth.defaultPort) (loopback, plain HTTP)")
 
         guard includeSlack else {
             print("\n  (pass --slack for one read-only round trip against these)")

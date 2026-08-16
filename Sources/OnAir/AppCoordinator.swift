@@ -147,10 +147,7 @@ final class AppCoordinator {
         }
         connection = .connecting
         do {
-            let session = try SlackOAuthSession(
-                clientID: source.id,
-                supportDirectory: PolicyStore.supportDirectory
-            )
+            let session = try SlackOAuthSession(clientID: source.id)
             openInBrowser(session.authorizationURL)
             note("Waiting for Slack in your browser…")
             try await TokenStore.saveToken(session.awaitToken())
@@ -159,9 +156,6 @@ final class AppCoordinator {
             connection = .disconnected
             note(error.summary, level: .failure)
         } catch let error as SlackError {
-            connection = .disconnected
-            note(error.summary, level: .failure)
-        } catch let error as LoopbackIdentity.Failure {
             connection = .disconnected
             note(error.summary, level: .failure)
         } catch {

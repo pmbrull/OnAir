@@ -53,7 +53,7 @@ connection with PKCE (ADR-0012).
 That means this build ships no Slack app id — either the shared app is not registered yet, or your
 workspace blocks it and you are bringing your own. The app manifest in the README does all of the
 configuration in one paste; [this link](
-https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Flocalhost%3A51234%2Fcallback%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%2C%22dnd%3Aread%22%2C%22dnd%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D)
+https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Fonair.pmbrull.me%2Fcallback%2F%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%2C%22dnd%3Aread%22%2C%22dnd%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D)
 opens Slack's **Create an app** flow with it pre-filled.
 
 Manual equivalent: <https://api.slack.com/apps> → **Create New App** → **From a manifest** → pick
@@ -62,7 +62,9 @@ your workspace → paste the manifest from the README → **Create**.
 What the manifest sets, so you can audit rather than trust it: the four user scopes
 (`users.profile:read/write` for the status, `dnd:read/write` for pausing notifications), the
 redirect URL
-(`https://localhost:51234/callback` — Slack rejects `http://`, which is why it is https), PKCE on
+(`https://onair.pmbrull.me/callback/` — a static page in this repository that hands the callback
+back to OnAir on your Mac; Slack rejects `http://`, which is why it cannot simply be the loopback,
+ADR-0019), PKCE on
 (public client, one-way — no secret is ever used), and **token rotation off** — rotation would
 expire every token in hours, and OnAir has no refresh loop (GAP-0002).
 

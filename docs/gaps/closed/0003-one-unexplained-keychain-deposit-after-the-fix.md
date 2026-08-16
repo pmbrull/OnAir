@@ -1,11 +1,22 @@
 ---
 id: GAP-0003
 title: One run deposited seven keychain items after the ADR-0016 fix, and nothing has reproduced it
-status: open
+status: closed
 impact: leaves a residual doubt that ADR-0016 closes every path to the login keychain, not just the one that was measured
 opened: 2026-08-14
-closed_by:
+closed_by: ADR-0019
 ---
+
+> **Closed 2026-08-16 by [ADR-0019](../../decisions/0019-the-callback-lands-on-a-page-we-host.md),
+> and closed honestly rather than answered.** The question — *is there a second path into the
+> keychain?* — was never answered. It stopped mattering: ADR-0019 removed the certificate, so
+> `SecPKCS12Import` is not called at all, and invariant A6 now fails the build on the call site
+> rather than on its options. There is no path, second or first.
+>
+> Its own closing condition was also met, over two days rather than the few weeks it asked for:
+> `make purge-loopback` on 2026-08-16 reports **no OnAir loopback identities in the login
+> keychain**. That is consistent with a transitional artefact and it is not proof of one — with the
+> mechanism deleted, nothing further can be learned by waiting.
 
 **Question.** During the verification sweep for ADR-0016, one `make verify` run added **7 private
 keys and 7 `localhost` certificates** to the login keychain *after* the `kSecImportToMemoryOnly` fix

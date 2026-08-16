@@ -29,7 +29,7 @@ TEST_FLAGS ?= $(shell if ! xcrun -f xctest >/dev/null 2>&1 && [ -d "$(CLT_FRAMEW
     "$(CLT_FRAMEWORKS)" "$(CLT_FRAMEWORKS)" "$(CLT_LIB)"; fi)
 
 .PHONY: help verify build test fmt fmt-check lint arch references version-rule hooks doctor \
-        doctor-slack app run install purge-loopback uninstall clean icon dist notarize release
+        doctor-slack app run install site purge-loopback uninstall clean icon dist notarize release
 
 ## The release lane's targets write and then read the same artefacts; running them interleaved
 ## under -j would zip a bundle mid-signature. Nothing here benefits from parallel make anyway —
@@ -46,8 +46,14 @@ verify: references arch version-rule fmt-check lint build test ## Run the full l
 references: ## ADR/GAP references resolve; records are indexed and their status matches their folder
 	@./scripts/check-references.sh
 
-arch: ## ARCHITECTURE.md invariants a grep can decide (A1, A2, A4, A5)
+arch: ## ARCHITECTURE.md invariants a grep can decide (A1, A2, A4, A5, A6, A7)
 	@./scripts/check-architecture.sh
+
+## The one part of the OAuth flow no Swift test can reach: the relay page runs in a browser, so
+## exercising it means serving it and pointing a browser at /callback/ (ADR-0019, invariant A7).
+site: ## Serve site/ locally so the callback relay can be driven with a real browser
+	@echo "http://127.0.0.1:8787/callback/?code=test&state=test — OnAir must be waiting on $(shell sed -n 's/.*defaultPort: UInt16 = \([0-9]*\).*/\1/p' Sources/SlackKit/OAuth/SlackOAuth.swift)"
+	@cd site && python3 -m http.server 8787 --bind 127.0.0.1
 
 ## The rule that decides what every push to main ships (ADR-0018). It is shell, so this table is
 ## the only thing that type-checks it — and a wrong answer here is a wrong version number on a
@@ -229,7 +235,7 @@ install: app ## Copy the bundle into /Applications
 ## Reports; deletes nothing. The `--apply` run is left to a human because it removes items from
 ## their login keychain, and the matcher — parsed subject `O=OnAir`, never the `localhost` label —
 ## is the only thing standing between it and somebody's own development certificate (ADR-0016).
-purge-loopback: ## Report the loopback identities stranded in the login keychain before ADR-0016
+purge-loopback: ## Report the loopback identities stranded in the login keychain before ADR-0016/0019
 	@./scripts/purge-loopback-keychain.sh
 
 uninstall: ## Remove the app, its Keychain items and its application-support directory

@@ -13,7 +13,7 @@ struct SlackPane: View {
     @State private var source: SlackOAuth.ClientIDSource?
 
     private var redirectURI: String {
-        SlackOAuth.redirectURI()
+        SlackOAuth.redirectURI
     }
 
     /// The whole point of the public-client design (ADR-0012): when the build carries the shared
@@ -83,8 +83,8 @@ struct SlackPane: View {
                 Spacer()
             }
 
-            Text("Connecting opens your browser. It will warn once that localhost's certificate "
-                + "is not trusted — that is OnAir's own callback listener; continue past it.")
+            Text("Connecting opens your browser. Slack returns you to onair.pmbrull.me, which "
+                + "hands the approval straight back to this Mac — nothing is stored there.")
                 .font(OnAirFont.caption)
                 .foregroundStyle(OnAirColor.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)

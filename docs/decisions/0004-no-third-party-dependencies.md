@@ -22,3 +22,9 @@ else. `Package.swift` has no `dependencies:` array.
 - The cost is real and lands in one place: minting a self-signed certificate has no public Apple
   API, so `LoopbackIdentity` shells out to `/usr/bin/openssl` rather than adding
   `swift-certificates` (ADR-0005). That trade was made deliberately and is the only one of its kind.
+
+> **The one cost this ADR named has since disappeared.**
+> [ADR-0019](0019-the-callback-lands-on-a-page-we-host.md) removed the certificate, and with it
+> `LoopbackIdentity` and the `openssl` call. The rule now holds with no exception at all — and it
+> extends to `site/`, which is plain HTML and JavaScript with no build step, so the page Slack
+> redirects to has no lockfile either.
