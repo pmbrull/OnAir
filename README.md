@@ -47,7 +47,7 @@ binary, in your Keychain, or anywhere else**.
 ### If Settings shows a "Client ID" field
 
 That build ships no Slack app id, so you bring your own — one minute with the manifest below.
-[**Click here to create it pre-filled**](https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Flocalhost%3A51234%2Fcallback%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%2C%22dnd%3Aread%22%2C%22dnd%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D), or go to
+[**Click here to create it pre-filled**](https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Fonair.pmbrull.me%2Fcallback%2F%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%2C%22dnd%3Aread%22%2C%22dnd%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D), or go to
 [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**, pick
 your workspace, and paste:
 
@@ -60,7 +60,7 @@ your workspace, and paste:
     },
     "oauth_config": {
         "redirect_urls": [
-            "https://localhost:51234/callback"
+            "https://onair.pmbrull.me/callback/"
         ],
         "scopes": {
             "user": [
@@ -139,11 +139,16 @@ it was found by running `doctor`, not by reasoning about it.
 - **The scopes are `users.profile:read/write` and `dnd:read/write`**, user-scoped. No bot token.
   It can change your status and snooze your notifications; it cannot read your messages, and it is
   not able to.
-- **The OAuth authorisation code never leaves your machine, and is useless if stolen.** The
-  callback lands on a TLS listener bound to loopback, using a certificate OnAir mints locally, and
-  PKCE means the code cannot be exchanged without a verifier that never leaves the process. The
-  browser warns about the certificate once; that is the price of not routing your login through
-  somebody else's server.
+- **The OAuth authorisation code passes through one page, and is useless to it.** Slack redirects
+  your browser to `https://onair.pmbrull.me/callback/` — a static page in this repository
+  ([`site/`](site/), served by GitHub Pages) — which hands the code straight to a listener on
+  `127.0.0.1` and does nothing else. It stores nothing, runs no server-side code, loads no
+  third-party script, and could not use the code if it kept it: PKCE binds the code to a verifier
+  generated on your Mac and never sent anywhere but Slack
+  ([ADR-0019](docs/decisions/0019-the-callback-lands-on-a-page-we-host.md)).
+  The token itself is never on that page's side of the wire — it is a direct POST from your Mac to
+  Slack. Before this, the callback landed on a TLS listener using a certificate OnAir minted
+  locally, and your browser warned you about it every single time.
 - **Nothing else is sent anywhere.** No telemetry, no analytics, no crash reporting.
 
 ## Known limitations

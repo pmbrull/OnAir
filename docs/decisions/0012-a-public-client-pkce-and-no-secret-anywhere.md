@@ -37,6 +37,10 @@ page safe (the intercepted-code risk it carried is gone), and that is the record
 removing the browser warning — but it is a separate change with its own hosting question, not
 this one.
 
+> **That separate change is [ADR-0019](0019-the-callback-lands-on-a-page-we-host.md)**, 2026-08-16.
+> It took exactly the path recorded here, for exactly the reason recorded here: the page relays a
+> code it cannot use, because the verifier never leaves the Mac. The certificate is gone.
+
 ## Consequences
 
 - **User setup collapses to one click.** Install → Connect → Authorize. No Slack console, no

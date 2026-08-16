@@ -9,7 +9,7 @@ struct SlackOAuthTests {
         let pkce = PKCE()
         let url = try #require(SlackOAuth.authorizationURL(
             clientID: "123.456",
-            redirectURI: SlackOAuth.redirectURI(),
+            redirectURI: SlackOAuth.redirectURI,
             state: "abc123",
             pkce: pkce
         ))
@@ -21,7 +21,7 @@ struct SlackOAuthTests {
         #expect(components.path == "/oauth/v2/authorize")
         #expect(items["client_id"] == "123.456")
         #expect(items["state"] == "abc123")
-        #expect(items["redirect_uri"] == "https://localhost:51234/callback")
+        #expect(items["redirect_uri"] == "https://onair.pmbrull.me/callback/")
         // `scope` would ask for a bot token, which cannot set anybody's status.
         #expect(items["scope"] == nil)
         #expect(items["user_scope"] == "users.profile:read,users.profile:write,dnd:read,dnd:write")
@@ -32,13 +32,19 @@ struct SlackOAuthTests {
         #expect(!(url.absoluteString.contains(pkce.verifier)))
     }
 
-    /// Slack refuses to register an `http://` redirect URL at all, which is the entire reason the
-    /// loopback listener speaks TLS (ADR-0005). A change here silently breaks Connect.
-    @Test("the redirect URI is https on loopback")
+    /// This string is registered in the Slack app and compared byte for byte, twice — at authorize
+    /// and again at the exchange. A change here that is not also made at api.slack.com breaks
+    /// Connect for everyone, with `bad_redirect_uri` as the only clue.
+    ///
+    /// The trailing slash is asserted because it is the path GitHub Pages serves; the unslashed
+    /// form is a 301, and a redirect between Slack and the relay is a hop that need not exist.
+    @Test("the redirect URI is the hosted relay, slash and all")
     func redirectURI() {
-        #expect(SlackOAuth.redirectURI() == "https://localhost:51234/callback")
-        #expect(SlackOAuth.redirectURI(port: 9999) == "https://localhost:9999/callback")
-        #expect(SlackOAuth.redirectURI().hasPrefix("https://"))
+        #expect(SlackOAuth.redirectURI == "https://onair.pmbrull.me/callback/")
+        // Slack refuses to register an `http://` redirect URL at all — with no localhost
+        // exception, which is what ADR-0005 spent a certificate on and ADR-0019 sidesteps.
+        #expect(SlackOAuth.redirectURI.hasPrefix("https://"))
+        #expect(SlackOAuth.redirectURI.hasSuffix("/"))
     }
 
     @Test("the state is long and does not repeat")
@@ -56,11 +62,11 @@ struct SlackOAuthTests {
     @Test("form encoding escapes the reserved characters URLComponents leaves alone")
     func formEncoding() {
         let encoded = SlackOAuth.formEncoded([
-            ("redirect_uri", "https://localhost:51234/callback"),
+            ("redirect_uri", SlackOAuth.redirectURI),
             ("code", "1234.5678.abc"),
         ])
         #expect(encoded ==
-            "redirect_uri=https%3A%2F%2Flocalhost%3A51234%2Fcallback&code=1234.5678.abc")
+            "redirect_uri=https%3A%2F%2Fonair.pmbrull.me%2Fcallback%2F&code=1234.5678.abc")
         #expect(!encoded.contains("://"))
     }
 
@@ -73,7 +79,7 @@ struct SlackOAuthTests {
             code: "1234.5678.abc",
             clientID: "123.456",
             pkce: pkce,
-            redirectURI: SlackOAuth.redirectURI()
+            redirectURI: SlackOAuth.redirectURI
         )
         #expect(body.contains("code_verifier=\(pkce.verifier)"))
         #expect(body.contains("client_id=123.456"))
@@ -84,10 +90,7 @@ struct SlackOAuthTests {
     @Test("a session refuses to start without a client id")
     func missingClientID() {
         #expect(throws: SlackOAuthSession.Failure.noClientID) {
-            try SlackOAuthSession(
-                clientID: "   ",
-                supportDirectory: FileManager.default.temporaryDirectory
-            )
+            try SlackOAuthSession(clientID: "   ")
         }
     }
 

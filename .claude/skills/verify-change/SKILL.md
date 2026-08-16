@@ -43,15 +43,17 @@ SAME reason, stop and use `harness-gap` instead of hand-fixing.
   curl -s -H "Authorization: Bearer $SLACK_USER_TOKEN" https://slack.com/api/users.profile.get
   ```
   and see GAP-0001, which is open precisely because this has not been done yet.
-- **The OAuth flow** → `LoopbackTests` mints a real certificate and drives a real listener. If you
-  touched `SlackKit/OAuth/`, watch them actually run.
+- **The OAuth flow** → `LoopbackTests` drives a real listener with `URLSession`. If you touched
+  `SlackKit/OAuth/`, watch them actually run.
+- **The relay page** → `site/` is the redirect URL (ADR-0019), and no Swift test reaches it because
+  it runs in a browser. If you touched it, serve `site/` and drive the callback with a real browser
+  against a listener on the port, for a code, for a decline, and for no parameters at all.
 
 ## 4. No residue
 
-- `ls ~/Library/Application\ Support/OnAir` — a `loopback.p12` is expected; nothing else should
-  accumulate.
-- `ls $TMPDIR | grep onair` = empty. `LoopbackIdentity` cleans its scratch directory in a `defer`,
-  and the tests remove theirs; leftovers mean a path escaped.
+- `ls ~/Library/Application\ Support/OnAir` — nothing should accumulate. A `loopback.p12` there
+  predates ADR-0019 and is no longer written or read; a *new* one means a certificate came back.
+- `ls $TMPDIR | grep onair` = empty. Leftovers mean a path escaped.
 - No new Keychain items beyond `slack-token` and `slack-client` under `io.umamidata.onair`.
 
 ## 5. Pre-merge self-review by subagents — MANDATORY

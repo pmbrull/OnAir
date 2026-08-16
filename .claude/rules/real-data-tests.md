@@ -14,9 +14,13 @@ touches reality:
   against this Mac's real hardware and disables itself when there is none.
 - **Slack parsing** → verbatim JSON captured from the real API. `SlackResponseFixtures` is the
   place, and it currently does **not** satisfy this rule — GAP-0001 is open and says so.
-- **The OAuth loopback** → `LoopbackTests`, which mints a real certificate with the real
-  `/usr/bin/openssl` and drives a real TLS listener with `URLSession`. A string cannot reproduce a
-  certificate the TLS stack rejects.
+- **The OAuth loopback** → `LoopbackTests`, which binds a real listener and drives it with
+  `URLSession`. A string cannot reproduce a port that will not bind or a request split across TCP
+  segments.
+- **The relay page** (`site/`, ADR-0019) → a real browser against a real listener. It is JavaScript
+  that runs in a browser, so no Swift test can reach it, and the failure it guards against — an
+  engine refusing the `https:` → `http://127.0.0.1` hop — is precisely one that only a browser can
+  have. Invariant A7 checks that its constants match the app's; it cannot check that it works.
 
 **Why.** The risk these modules carry is that CoreMediaIO, CoreAudio, Slack, or LibreSSL is *not
 what we think it is*. A hand-written fixture encodes our belief and then confirms it — it proves

@@ -9,7 +9,7 @@ outlives its plan gets a record here; a question with no answer gets a [gap](../
 | [0002](0002-headless-kits-a-thin-app-shell.md) | Headless kits, a thin app shell |
 | [0003](0003-property-listeners-over-polling.md) | Property listeners over polling |
 | [0004](0004-no-third-party-dependencies.md) | No third-party dependencies |
-| [0005](0005-oauth-over-a-self-signed-https-loopback.md) | OAuth over a self-signed HTTPS loopback |
+| [0005](0005-oauth-over-a-self-signed-https-loopback.md) | OAuth over a self-signed HTTPS loopback — *superseded by 0019* |
 | [0006](0006-the-token-lives-in-the-keychain.md) | The token lives in the Keychain and nowhere else |
 | [0007](0007-debounce-the-transitions-asymmetrically.md) | Debounce the transitions, asymmetrically |
 | [0008](0008-never-clobber-a-status-onair-did-not-set.md) | Never clobber a status OnAir did not set |
@@ -20,9 +20,10 @@ outlives its plan gets a record here; a question with no answer gets a [gap](../
 | [0013](0013-pause-notifications-in-self-renewing-slices.md) | Pause notifications in self-renewing slices |
 | [0014](0014-render-shortcodes-from-a-vendored-table.md) | Render shortcodes from a vendored table |
 | [0015](0015-carry-the-previous-status-expiry.md) | Carry the previous status's expiry across a restore |
-| [0016](0016-the-loopback-key-never-touches-a-keychain.md) | The loopback key never touches a keychain |
+| [0016](0016-the-loopback-key-never-touches-a-keychain.md) | The loopback key never touches a keychain — *superseded by 0019* |
 | [0017](0017-distribute-through-a-personal-tap.md) | Distribute through a personal tap, as a notarized zip, released locally |
 | [0018](0018-release-from-ci-on-every-push-to-main.md) | Release from CI on every push to main, with the signing key in repository secrets |
+| [0019](0019-the-callback-lands-on-a-page-we-host.md) | The callback lands on a page we host |
 
 ## Format
 

@@ -1,9 +1,15 @@
 # ADR-0005 — OAuth over a self-signed HTTPS loopback
 
-- Status: Accepted — amended by ADR-0012, which removed the pasted client credentials: OnAir is
-  now a public client (PKCE), ships only a client id, and no secret exists anywhere. The loopback
-  listener, its certificate and the reasoning below survive unchanged.
+- Status: **Superseded by [ADR-0019](0019-the-callback-lands-on-a-page-we-host.md)**, which moved
+  the Redirect URL to a hosted page and left the loopback listener speaking plain HTTP. The
+  certificate, the `openssl` call and the browser warning are gone. Previously amended by ADR-0012,
+  which removed the pasted client credentials — and it is exactly that change that made ADR-0019
+  safe, because a code bound to a verifier on this Mac is useless to the page that relays it.
 - Date: 2026-08-12
+
+> The Context below is still true and still the reason any of this exists: Slack refuses an
+> `http://` redirect URL, with no localhost exception. ADR-0019 does not dispute it — it stops
+> pointing Slack at the loopback at all.
 
 ## Context
 

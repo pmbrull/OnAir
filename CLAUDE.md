@@ -32,6 +32,7 @@ make doctor-slack   # as doctor, plus one read-only Slack round trip
 make test           # the suite (see below — not `swift test`)
 make app            # assemble .build/OnAir.app
 make run            # build and launch
+make site           # serve site/ so the callback relay can be driven with a real browser
 make icon           # regenerate Resources/AppIcon.icns from scripts/make-icon.swift
 make version-rule   # the release bump rule's table — what your commit subject would ship
 make release        # dist + notarize LOCALLY — the recovery lane; CI releases (ADR-0018)
@@ -50,9 +51,13 @@ passed, so a failed build leaves no bumped version and no orphan tag.
    Line Tools, so the suite is written against Swift Testing — which CLT ships on no default search
    or runtime path. `make test` detects that and adds a framework path and two rpaths. Same for
    `swift build --build-tests`.
-2. **Slack refuses `http://` redirect URLs, with no localhost exception.** That single fact is why
-   there is a TLS listener, a self-signed certificate and a call to `/usr/bin/openssl` in this
-   codebase (ADR-0005). Do not "simplify" it back to plain HTTP; it will not register.
+2. **Slack refuses `http://` redirect URLs, with no localhost exception — so the redirect URL is
+   not this machine.** It is `https://onair.pmbrull.me/callback/`, a static page in `site/` served
+   by GitHub Pages, which hands `code` and `state` to the loopback with a top-level navigation
+   (ADR-0019). The listener therefore speaks plain HTTP, and the certificate, the `openssl` call
+   and the browser warning are gone. The page and the app must agree on the port and the path —
+   invariant A7 fails the build if they do not. Do not point Slack back at `localhost`; it will
+   not register.
 3. **A running microphone does not mean a meeting.** Audio mixers hold inputs open around the
    clock — measured, on this machine, via Elgato Wave Link. Hence `watchMicrophone: false` by
    default (ADR-0011). Before changing any device default, run `make doctor`.
@@ -60,12 +65,13 @@ passed, so a failed build leaves no bumped version and no orphan tag.
    re-applies — and if it re-read the profile to find `previous`, it would stash its *own* status
    and the eventual restore would be a no-op that strands it (ADR-0008). `engine.appliedPrevious`
    is what distinguishes the two paths.
-5. **`SecPKCS12Import` writes to the login keychain unless you stop it.** The obvious call — pass
-   the passphrase, take the `SecIdentity` — permanently deposits the certificate *and its private
-   key* in the user's login keychain, once per distinct archive. Each key's ACL names the importing
-   binary, so a rebuilt OnAir makes macOS ask the human for their login password. 268 stranded keys
-   on the machine that found it, most of them minted by `make verify` itself. `kSecImportToMemoryOnly`
-   is the whole fix; invariant A6 fails the build without it (ADR-0016).
+5. **`SecPKCS12Import` writes to the login keychain unless you stop it — so OnAir imports no
+   PKCS#12 at all.** The obvious call — pass the passphrase, take the `SecIdentity` — permanently
+   deposits the certificate *and its private key* in the user's login keychain, once per distinct
+   archive. Each key's ACL names the importing binary, so a rebuilt OnAir makes macOS ask the human
+   for their login password. 268 stranded keys on the machine that found it, most of them minted by
+   `make verify` itself (ADR-0016). ADR-0019 removed the certificate entirely; invariant A6 now
+   fails the build on the *call*, so a future TLS listener cannot bring the failure back with it.
 6. **The engine must be told what happened.** `advance` returns an intent; until the caller reports
    back with `recordApplied` / `recordSkipped` / `recordRestored` / `recordFailed`, the engine
    assumes nothing happened and offers the same intent again. That is the retry, and it is why a
@@ -83,8 +89,10 @@ passed, so a failed build leaves no bumped version and no orphan tag.
 - **Never open a capture stream.** Read `IsRunningSomewhere`; nothing else. Invariant A5, ADR-0001.
 - **Never put a credential anywhere but the Keychain** — not `UserDefaults`, not a log, not an
   interpolated string. Invariant A4, ADR-0006.
-- **Never put the loopback key *in* a keychain.** `SecPKCS12Import` must pass
-  `kSecImportToMemoryOnly`. Invariant A6, ADR-0016.
+- **Never import a PKCS#12 archive.** `SecPKCS12Import` deposits the key in the login keychain, and
+  since ADR-0019 there is nothing left that needs one. Invariant A6, ADR-0016.
+- **Never let the relay page and the listener drift.** The page in `site/` is the redirect URL; the
+  port and path it hands back to are the app's. Invariant A7, ADR-0019.
 - **Never reintroduce a client secret.** OnAir is a public client: PKCE proves the connection,
   and the only shipped identifier is the public client id (ADR-0012). A `client_secret` appearing
   anywhere — code, Settings, Keychain — is a regression, not an option.
@@ -102,9 +110,17 @@ passed, so a failed build leaves no bumped version and no orphan tag.
 
 ## Current state
 
-v0.1. Everything described above is built and the gate is green: 115 tests in 13 suites, including a
-device journey against this Mac's real hardware and a loopback suite that mints a real certificate
-and drives a real TLS listener with `URLSession`.
+v0.2. Everything described above is built and the gate is green: 112 tests in 13 suites, including a
+device journey against this Mac's real hardware and a loopback suite that drives a real listener
+with `URLSession`.
+
+**The callback moved (ADR-0019) and the certificate is gone.** Slack's redirect URL is now
+`https://onair.pmbrull.me/callback/` — `site/`, deployed by `.github/workflows/pages.yml` — and the
+relay was measured before the app was touched: a headless browser through the real page reached a
+real listener with `code` and `state` intact, for the default port, for a port carried in `state`,
+and for a decline; a callback with no parameters reached nothing. What is **not** yet measured is
+one live **Connect to Slack** end to end against a real workspace with the new redirect URL
+registered. Until that has run, "no warning" is a property of the design, not an observation.
 
 What is **partly** verified against reality is Slack's side of the wire. One live
 `users.profile.get` (2026-08-13, `make doctor-slack` against Collate) parsed cleanly, which pins

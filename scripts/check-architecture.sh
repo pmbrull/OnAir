@@ -93,23 +93,48 @@ if hits=$(grep -rn '<key>NS\(Camera\|Microphone\)UsageDescription</key>' Resourc
     done <<<"$hits"
 fi
 
-echo "A6 — the loopback key never touches a keychain"
+echo "A6 — OnAir imports no PKCS#12 archive at all"
 # `SecPKCS12Import` on macOS imports into the *default* keychain unless `kSecImportToMemoryOnly`
 # says otherwise, so the obvious call leaves a certificate and a private key behind on every
 # distinct archive — and each key's ACL names the importing binary, which is how the user ends up
-# typing their login password for OnAir. This is checked rather than commented because "simplify
-# the import options" is exactly the shape of change that would undo it (ADR-0016).
-# The open paren keeps prose out of it: the comment above the call names the function too, and
-# flagging that as a second violation would make one mistake look like two.
-if hits=$(grep -rn 'SecPKCS12Import(' Sources 2>/dev/null); then
+# typing their login password for OnAir. 268 stranded keys on the machine that found it (ADR-0016).
+#
+# Since ADR-0019 there is no loopback certificate to import, so the invariant is stronger than the
+# one it replaces: not "pass the right option" but "there is no import". The check stays because the
+# thing it guards against is a *reintroduction* — a future TLS listener bringing the whole problem
+# back with it — and a check is cheaper than remembering why the certificate left.
+if hits=$(grep -rn 'SecPKCS12Import' Sources 2>/dev/null); then
     while IFS= read -r hit; do
-        file="${hit%%:*}"
-        # The dictionary-key form, not a bare mention: the fix is documented in a comment right
-        # above the call, and a plain `grep kSecImportToMemoryOnly` would be satisfied by the
-        # comment explaining the option after somebody deleted the option.
-        grep -qE 'kSecImportToMemoryOnly *as *String *:' "$file" ||
-            fail "$hit — SecPKCS12Import must pass kSecImportToMemoryOnly (A6, ADR-0016)"
+        fail "$hit — OnAir imports no PKCS#12; the callback is a hosted relay now (A6, ADR-0019)"
     done <<<"$hits"
+fi
+
+echo "A7 — the relay page and the listener agree"
+# The redirect URL is a page on the public internet (ADR-0019). It ships from this repository so it
+# cannot drift from the app, but "cannot" is only true if something checks: a page pointing at the
+# wrong port hands the callback to a closed door, and the user sees a browser error with nothing in
+# it that names OnAir. Every value below appears in exactly two files, and this is the seam.
+relay=site/callback/index.html
+for required in site/index.html "$relay" site/style.css site/CNAME; do
+    [ -f "$required" ] || fail "$required is missing — the redirect URL would 404 (A7, ADR-0019)"
+done
+if [ -f "$relay" ]; then
+    swift_port=$(sed -n 's/.*defaultPort: UInt16 = \([0-9]*\).*/\1/p' \
+        Sources/SlackKit/OAuth/SlackOAuth.swift)
+    grep -q "DEFAULT_PORT = $swift_port;" "$relay" ||
+        fail "$relay does not hand back to port $swift_port (A7, ADR-0019)"
+    swift_path=$(sed -n 's/.*callbackPath = "\([^"]*\)".*/\1/p' \
+        Sources/SlackKit/OAuth/LoopbackReceiver.swift)
+    grep -q "CALLBACK_PATH = \"$swift_path\";" "$relay" ||
+        fail "$relay does not hand back to $swift_path (A7, ADR-0019)"
+fi
+if [ -f site/CNAME ]; then
+    # The domain is asserted from the CNAME file rather than written out again here: the file is
+    # what GitHub Pages actually serves the site under, so it is the one that can be wrong.
+    domain=$(tr -d '[:space:]' <site/CNAME)
+    grep -q "redirectURI = \"https://$domain/callback/\"" \
+        Sources/SlackKit/OAuth/SlackOAuth.swift ||
+        fail "SlackOAuth.redirectURI does not point at https://$domain/callback/ (A7, ADR-0019)"
 fi
 
 if [ "$status" -eq 0 ]; then

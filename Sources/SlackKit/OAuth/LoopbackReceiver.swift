@@ -1,12 +1,15 @@
 import Foundation
 import Network
-import Security
 
-/// A one-shot HTTPS server on `localhost` that catches Slack's OAuth redirect.
+/// A one-shot HTTP server on `localhost` that catches Slack's OAuth redirect — via the relay page,
+/// never directly.
 ///
-/// It accepts exactly one authorisation and then stops. TLS is not optional here — Slack refuses
-/// to register an `http://` redirect URL at all (ADR-0005) — so the listener presents the identity
-/// from `LoopbackIdentity`, and the browser shows its self-signed warning once.
+/// It accepts exactly one authorisation and then stops. Plain HTTP is safe here *because* Slack no
+/// longer redirects here: it redirects to `https://onair.pmbrull.me/callback/`, and that page hands
+/// the code on with a top-level navigation, which is not subject to mixed-content rules (ADR-0019).
+/// Before that page existed the redirect URL was this listener, Slack refuses to register an
+/// `http://` one, and the price was a self-signed certificate and a browser warning every time
+/// (ADR-0005, now superseded).
 ///
 /// Concurrency: every mutable field is confined to `queue`, and `NWListener`/`NWConnection` deliver
 /// their callbacks on it because they were started with it.
@@ -17,7 +20,6 @@ public final class LoopbackReceiver: @unchecked Sendable {
     }
 
     public enum Failure: Error, Sendable, Equatable {
-        case identityUnusable
         case portUnavailable(UInt16)
         case listenerFailed(String)
         case timedOut
@@ -33,8 +35,6 @@ public final class LoopbackReceiver: @unchecked Sendable {
         /// targets is how a failure ends up reaching someone as a raw enum name.
         public var summary: String {
             switch self {
-            case .identityUnusable:
-                "The loopback certificate could not be used for TLS."
             case let .portUnavailable(port):
                 "Port \(port) is already in use, so Slack's redirect has nowhere to land."
             case let .listenerFailed(detail):
@@ -55,7 +55,6 @@ public final class LoopbackReceiver: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "io.umamidata.onair.loopback")
     private let port: UInt16
-    private let identity: SecIdentity
 
     private var listener: NWListener?
     private var connections: [NWConnection] = []
@@ -63,9 +62,8 @@ public final class LoopbackReceiver: @unchecked Sendable {
     private var expectedState = ""
     private var settled = false
 
-    public init(port: UInt16, identity: SecIdentity) {
+    public init(port: UInt16) {
         self.port = port
-        self.identity = identity
     }
 
     deinit { listener?.cancel() }
@@ -108,14 +106,10 @@ public final class LoopbackReceiver: @unchecked Sendable {
     // MARK: - Listening
 
     private func startListening() throws {
-        guard let secIdentity = sec_identity_create(identity) else {
-            throw Failure.identityUnusable
-        }
-        let tls = NWProtocolTLS.Options()
-        sec_protocol_options_set_local_identity(tls.securityProtocolOptions, secIdentity)
-
-        let parameters = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
-        // Nothing off this machine may reach the port the authorisation code arrives on.
+        let parameters = NWParameters.tcp
+        // Nothing off this machine may reach the port the authorisation code arrives on. With TLS
+        // gone this is the whole of the listener's protection, together with the `state` check —
+        // so it is not an optimisation and must not be relaxed to bind every interface.
         parameters.requiredInterfaceType = .loopback
         // A previous attempt that ended in TIME_WAIT should not make Connect fail for a minute.
         parameters.allowLocalEndpointReuse = true
@@ -289,9 +283,9 @@ public final class LoopbackReceiver: @unchecked Sendable {
     }
 
     /// The refusal reason on this page comes out of a URL anyone can construct and aim at the
-    /// listener. It is plain text as far as OnAir is concerned, so it is escaped rather than
-    /// trusted — script running on a page served from `https://localhost` is not something to
-    /// hand out for free.
+    /// listener — and since ADR-0019 it has also been through a page on the public internet. It is
+    /// plain text as far as OnAir is concerned, so it is escaped rather than trusted; script
+    /// running on a page served from this origin is not something to hand out for free.
     private static func escaped(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")

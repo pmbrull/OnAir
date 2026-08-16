@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OnAir — your camera sets your Slack status</title>
+    <meta
+      name="description"
+      content="A macOS menu-bar app that sets your Slack status when your camera turns on, and puts the old one back when it turns off. It never opens your camera."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://onair.pmbrull.me/" />
+    <meta property="og:title" content="OnAir — your camera sets your Slack status" />
+    <meta
+      property="og:description"
+      content="A macOS menu-bar app that sets your Slack status when your camera turns on, and puts the old one back when it turns off."
+    />
+    <link rel="canonical" href="https://onair.pmbrull.me/" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>OnAir<span class="dot">.</span></h1>
+      <p class="lede">
+        Your camera turns on, your Slack status says so. It turns off, the old one comes back.
+      </p>
+
+      <pre><code>brew install --cask pmbrull/tap/onair</code></pre>
+      <p class="muted">Signed, notarized, universal. macOS 15+.</p>
+
+      <h2>What it does not do</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>It never opens your camera</h3>
+          <p>
+            It asks macOS whether one is running — the same question the green dot answers — and
+            never reads a frame. No camera permission, and it never appears in Privacy &amp;
+            Security.
+          </p>
+        </div>
+        <div class="card">
+          <h3>It never keeps a secret</h3>
+          <p>
+            OnAir is a public client: it ships a Slack app id and proves each connection with PKCE.
+            Your token lives in the Keychain and nowhere else.
+          </p>
+        </div>
+        <div class="card">
+          <h3>It never clobbers your status</h3>
+          <p>
+            If you set something yourself, OnAir leaves it alone — and when it does restore, it puts
+            back the expiry the status arrived with.
+          </p>
+        </div>
+        <div class="card">
+          <h3>It never watches the mic</h3>
+          <p>
+            Not by default. Audio mixers hold the microphone open all day, so a running mic is not
+            evidence of a meeting.
+          </p>
+        </div>
+      </div>
+
+      <h2>Setup</h2>
+      <ul>
+        <li>Install with Homebrew, or build it from source.</li>
+        <li>Open Settings and press <strong>Connect to Slack</strong>.</li>
+        <li>Approve in the browser. That is the whole setup.</li>
+      </ul>
+    </main>
+
+    <footer>
+      <span>Made by <a href="https://pmbrull.me">pmbrull</a></span>
+      <span><a href="https://github.com/pmbrull/OnAir">Source and docs on GitHub</a></span>
+    </footer>
+  </body>
+</html>
