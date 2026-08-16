@@ -30,9 +30,11 @@ drift into a version where the page hands back to a door the app is not standing
       mentions it.
 - [ ] `LoopbackTests` drives the plain-HTTP listener with `URLSession` and still covers: the happy
       path, `?error=`, a mismatched `state`, a non-callback path, and a malformed request.
-- [ ] The relay is measured, not reasoned about: a browser loaded with a callback URL reaches a
+- [x] The relay is measured, not reasoned about: a browser loaded with a callback URL reaches a
       listener on the loopback port with `code` and `state` intact, for the default port and for a
       port carried in `state`.
+- [x] And measured **from an HTTPS origin**, in Chromium, WebKit and Firefox — the first pass served
+      the page over `http://`, which did not exercise the one property the design rests on.
 - [ ] `https://onair.pmbrull.me/callback/` serves the relay over a valid certificate, and
       `https://onair.pmbrull.me/` serves a landing page.
 - [ ] One live **Connect to Slack** completes end to end with no certificate warning, against a
@@ -89,9 +91,16 @@ itself is worth keeping; the deploy workflow uploads a directory.
   the `redirect_uri`. The page adds `no-referrer` and `noindex` because both are free. This is a
   real change in exposure and it is the reason ADR-0019 exists rather than a commit message.
 - **A browser that refuses the `https:` → `http://127.0.0.1` hop** would break connecting for
-  everyone on it. Loopback is exempt from mixed-content blocking and from HTTPS-First upgrades in
-  every current engine, and the page keeps a visible fallback link. Caught by step 1's measurement,
-  and by the live connect in the acceptance criteria.
+  everyone on it — and on macOS, Safari refusing it would break it for most people. **Measured on
+  2026-08-16 in all three engines**, driving the real page served over real TLS: Chromium, WebKit
+  and Firefox each performed the navigation and the loopback listener received `code` and `state`
+  intact. Mixed-content rules apply to subresources, not to top-level navigations, and loopback is
+  exempt from HTTPS-First upgrading in all three. The page also keeps a visible fallback link for
+  an engine that surprises us anyway.
+
+  Worth recording from the same run: **Firefox then fetched `/favicon.ico` against the loopback
+  listener.** That is exactly the request `faviconDoesNotEndTheWait` exists for, arriving unprompted
+  from a real browser rather than from a test.
 - **Trailing slash.** `https://onair.pmbrull.me/callback` without the slash is a 301 on GitHub
   Pages. Registering the slashed form with Slack sidesteps the question entirely; the unslashed
   form is checked anyway, because a human will type it.
