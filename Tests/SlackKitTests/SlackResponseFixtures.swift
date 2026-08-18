@@ -93,6 +93,61 @@ enum SlackResponseFixtures {
     "token_type":"bot","team":{"id":"T00000000","name":"Collate"}}
     """.utf8)
 
+    // MARK: - Rotating credentials (ADR-0020)
+
+    /// Split for the same reason as the others: `xoxe` is inside the token-literal grep's
+    /// character class, so a fixture written out whole would fail `make verify`.
+    static let fakeRefreshToken = "xoxe" + "-1-0000-not-a-real-refresh"
+
+    /// What the shared app actually issues — measured indirectly on 2026-08-18, when a credential
+    /// minted five days earlier answered `token_expired` (GAP-0002). The 43,200 seconds is Slack's
+    /// documented rotation lifetime; **the shape is still documentation-derived** (GAP-0001), and
+    /// the capture that replaces it will have its two credential values redacted, because A4
+    /// outranks the verbatim half of `.claude/rules/real-data-tests.md`.
+    static let oauthAccessRotating = Data("""
+    {"ok":true,"app_id":"A00000000","authed_user":{"id":"U00000000",
+    "scope":"users.profile:read,users.profile:write","access_token":"\(fakeUserToken)",
+    "token_type":"user","refresh_token":"\(fakeRefreshToken)","expires_in":43200},
+    "team":{"id":"T00000000","name":"Collate"},"is_enterprise_install":false}
+    """.utf8)
+
+    /// A renewal answered at the top level with `token_type: "user"`. Slack documents the renewal
+    /// response only for bot tokens, where the token is top-level; whether the user case wraps it
+    /// in `authed_user` is unmeasured, so the parser takes both and these two fixtures pin that.
+    static let oauthRenewalTopLevel = Data("""
+    {"ok":true,"app_id":"A00000000","access_token":"\(fakeUserToken)","token_type":"user",
+    "refresh_token":"\(fakeRefreshToken)","expires_in":43200,
+    "team":{"id":"T00000000","name":"Collate"}}
+    """.utf8)
+
+    static let oauthRenewalUnderAuthedUser = Data("""
+    {"ok":true,"app_id":"A00000000","authed_user":{"id":"U00000000",
+    "access_token":"\(fakeUserToken)","token_type":"user",
+    "refresh_token":"\(fakeRefreshToken)","expires_in":43200}}
+    """.utf8)
+
+    /// Expires, and carries nothing to renew it with. Not a shape Slack is known to send — it is
+    /// here to pin that OnAir reports the dead end rather than storing a credential it will
+    /// discover it cannot renew at the deadline.
+    static let oauthAccessExpiringWithoutRefresh = Data("""
+    {"ok":true,"app_id":"A00000000","authed_user":{"id":"U00000000",
+    "access_token":"\(fakeUserToken)","token_type":"user","expires_in":43200}}
+    """.utf8)
+
+    /// `expires_in` as a quoted number. Some of Slack's own prose quotes it, so accepting it is
+    /// one branch; the alternative is a renewal loop that silently never runs.
+    static let oauthAccessQuotedExpiry = Data("""
+    {"ok":true,"authed_user":{"id":"U00000000","access_token":"\(fakeUserToken)",
+    "token_type":"user","refresh_token":"\(fakeRefreshToken)","expires_in":"43200"}}
+    """.utf8)
+
+    /// An `expires_in` that is neither. It must throw: reading it as "never expires" would disable
+    /// the renewal loop and hand the user back the daily login ADR-0020 exists to remove.
+    static let oauthAccessUnreadableExpiry = Data("""
+    {"ok":true,"authed_user":{"id":"U00000000","access_token":"\(fakeUserToken)",
+    "token_type":"user","refresh_token":"\(fakeRefreshToken)","expires_in":"soon"}}
+    """.utf8)
+
     /// `dnd.info` while a snooze runs. Documentation-derived like everything here (GAP-0001);
     /// the snooze_* keys are documented as present only during a snooze.
     static let dndInfoSnoozing = Data("""

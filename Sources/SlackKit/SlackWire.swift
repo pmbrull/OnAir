@@ -101,24 +101,88 @@ public enum SlackWire {
         return SlackIdentity(userID: userID, userName: userName, teamName: teamName)
     }
 
-    /// `oauth.v2.access`. The user token hangs off `authed_user`, **not** the top-level
-    /// `access_token` — that one is the bot token, which an app requesting only `user_scope` does
-    /// not even receive. Reading the wrong field yields `nil` on a response that says `ok: true`.
-    public static func userAccessToken(
+    /// `oauth.v2.access`, for both of the things it does: the first exchange, and every renewal
+    /// after it (ADR-0020).
+    ///
+    /// `now` is injected because `expires_in` is a *duration*: the absolute instant OnAir stores is
+    /// derived here, and a test that could not fix the clock could only assert the arithmetic
+    /// against itself.
+    public static func credential(
         _ data: Data,
         status: Int,
-        retryAfter: String? = nil
-    ) throws -> String {
+        retryAfter: String? = nil,
+        now: Date = Date()
+    ) throws -> SlackCredential {
         let json = try envelope(data, status: status, retryAfter: retryAfter)
-        guard let authedUser = json["authed_user"] as? [String: Any] else {
-            throw SlackError.malformedResponse("no authed_user object")
-        }
-        guard let token = authedUser["access_token"] as? String, !token.isEmpty else {
+        let carrier = try tokenCarrier(json)
+        guard let accessToken = carrier["access_token"] as? String, !accessToken.isEmpty else {
             throw SlackError.malformedResponse(
-                "authed_user carried no access_token — was the app installed with user scopes?"
+                "no access_token — was the app installed with user scopes?"
             )
         }
-        return token
+        return try SlackCredential(
+            accessToken: accessToken,
+            expiresAt: expiry(carrier, now: now),
+            refreshToken: renewalToken(carrier)
+        )
+    }
+
+    /// Which object the user token is in.
+    ///
+    /// The first exchange hangs it off `authed_user`, **not** the top-level `access_token` — that
+    /// one is the bot token, which an app requesting only `user_scope` does not even receive.
+    /// Slack documents the *renewal* response only for the bot case, where the token is at the top
+    /// level; whether the user case wraps it in `authed_user` is unmeasured (GAP-0002). Both are
+    /// accepted, and if neither is there the error names both, because the alternative is
+    /// "connect is broken" with nothing pointing at the shape that changed.
+    private static func tokenCarrier(_ json: [String: Any]) throws -> [String: Any] {
+        if let authedUser = json["authed_user"] as? [String: Any] {
+            return authedUser
+        }
+        guard json["access_token"] is String else {
+            throw SlackError.malformedResponse(
+                "neither an authed_user object nor a top-level access_token"
+            )
+        }
+        // A bot token at the top level is not a near-enough substitute: it cannot set anybody's
+        // status, so accepting it would store a credential that fails on the first real call.
+        guard json["token_type"] as? String == "user" else {
+            throw SlackError.malformedResponse(
+                "the only credential in the response is a bot one; OnAir asks for user scopes only"
+            )
+        }
+        return json
+    }
+
+    /// Absent means Slack issued a non-expiring credential — the documented behaviour with token
+    /// rotation off. Present but unreadable is a schema change, and it throws: reading it as
+    /// "never expires" would disable the whole renewal loop silently, which is the failure that
+    /// sends the user back to Connect every morning without saying why.
+    private static func expiry(_ carrier: [String: Any], now: Date) throws -> Date? {
+        guard let raw = carrier["expires_in"] else { return nil }
+        let seconds: Int
+        if let number = raw as? Int {
+            seconds = number
+        } else if let text = raw as? String, let parsed = Int(text) {
+            // Slack's examples show a bare number; some of its docs quote it. Accepting both costs
+            // one branch, and guessing wrong costs a renewal loop that never runs.
+            seconds = parsed
+        } else {
+            throw SlackError
+                .malformedResponse("expires_in was neither a number nor a numeric string")
+        }
+        guard seconds > 0 else {
+            throw SlackError.malformedResponse("expires_in was not a positive number of seconds")
+        }
+        return now.addingTimeInterval(TimeInterval(seconds))
+    }
+
+    private static func renewalToken(_ carrier: [String: Any]) throws -> String? {
+        guard let raw = carrier["refresh_token"] else { return nil }
+        guard let value = raw as? String, !value.isEmpty else {
+            throw SlackError.malformedResponse("refresh_token was present but not a usable string")
+        }
+        return value
     }
 
     /// `dnd.info` and `dnd.setSnooze` share this shape. One documented quirk the parser leans on:

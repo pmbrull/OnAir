@@ -126,8 +126,8 @@ public enum SlackOAuth {
         return components?.url
     }
 
-    /// Trades the one-time code for a user token, proving possession of the verifier instead of a
-    /// secret. The token is returned, never stored — storage is the app's `TokenStore` and the
+    /// Trades the one-time code for a user credential, proving possession of the verifier instead
+    /// of a secret. It is returned, never stored — storage is the app's `TokenStore` and the
     /// Keychain (invariant A4).
     public static func exchange(
         code: String,
@@ -136,16 +136,47 @@ public enum SlackOAuth {
         redirectURI: String,
         baseURL: URL = SlackClient.productionAPI,
         session: URLSession = .shared
-    ) async throws -> String {
+    ) async throws -> SlackCredential {
+        try await postToAccess(
+            exchangeBody(code: code, clientID: clientID, pkce: pkce, redirectURI: redirectURI),
+            baseURL: baseURL,
+            session: session
+        )
+    }
+
+    /// Trades a refresh token for a fresh credential (ADR-0020).
+    ///
+    /// Same endpoint as the exchange, and still no secret: a public client renews by presenting the
+    /// refresh token alone. PKCE plays no part here — the verifier proved the *authorisation*, and
+    /// there is no browser in this call to intercept anything.
+    ///
+    /// Slack's refresh tokens are single-use, so the caller must persist what comes back before the
+    /// old one is discarded, and must not run two of these at once.
+    public static func renew(
+        refreshToken: String,
+        clientID: String,
+        baseURL: URL = SlackClient.productionAPI,
+        session: URLSession = .shared
+    ) async throws -> SlackCredential {
+        try await postToAccess(
+            renewalBody(refreshToken: refreshToken, clientID: clientID),
+            baseURL: baseURL,
+            session: session
+        )
+    }
+
+    private static func postToAccess(
+        _ body: String,
+        baseURL: URL,
+        session: URLSession
+    ) async throws -> SlackCredential {
         var request = URLRequest(url: baseURL.appendingPathComponent("oauth.v2.access"))
         request.httpMethod = "POST"
         request.setValue(
             "application/x-www-form-urlencoded; charset=utf-8",
             forHTTPHeaderField: "Content-Type"
         )
-        request.httpBody = Data(
-            exchangeBody(code: code, clientID: clientID, pkce: pkce, redirectURI: redirectURI).utf8
-        )
+        request.httpBody = Data(body.utf8)
 
         let data: Data
         let response: URLResponse
@@ -157,7 +188,7 @@ public enum SlackOAuth {
         guard let http = response as? HTTPURLResponse else {
             throw SlackError.malformedResponse("not an HTTP response")
         }
-        return try SlackWire.userAccessToken(
+        return try SlackWire.credential(
             data,
             status: http.statusCode,
             retryAfter: http.value(forHTTPHeaderField: "Retry-After")
@@ -179,6 +210,21 @@ public enum SlackOAuth {
             // Slack requires the same redirect_uri in both steps when the app has more than one
             // registered, and rejects the exchange outright when they differ.
             ("redirect_uri", redirectURI),
+        ])
+    }
+
+    /// Split from `renew` for the same reason `exchangeBody` is split from `exchange`: a test can
+    /// pin that a renewal presents the refresh token and `grant_type`, and that it still sends no
+    /// `client_secret` — the public-client property of ADR-0012 has to survive every new call, not
+    /// just the one it was written about.
+    ///
+    /// No `redirect_uri`: there is no redirect in a renewal, and Slack compares that string byte
+    /// for byte when it is present.
+    static func renewalBody(refreshToken: String, clientID: String) -> String {
+        formEncoded([
+            ("client_id", clientID),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refreshToken),
         ])
     }
 
@@ -250,7 +296,7 @@ public struct SlackOAuthSession: Sendable {
 
     /// Waits for the browser, then exchanges the code. Five minutes is long enough to find the
     /// right workspace in the picker and short enough that a forgotten tab releases the port.
-    public func awaitToken(timeout: TimeInterval = 300) async throws -> String {
+    public func awaitCredential(timeout: TimeInterval = 300) async throws -> SlackCredential {
         let callback = try await receiver.waitForCallback(expectedState: state, timeout: timeout)
         return try await SlackOAuth.exchange(
             code: callback.code,

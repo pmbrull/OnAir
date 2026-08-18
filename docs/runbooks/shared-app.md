@@ -64,9 +64,18 @@ Then `make verify`, and check Settings › Slack shows **no** Client ID field an
    listener: check `make doctor` names the port it is expecting.
 2. `make doctor-slack` — identity, current status and its expiry come back, read-only. The
    `expires` row is the field ADR-0015 turns on.
-3. Note which endpoint answered the exchange and whether the response carried `expires_in`;
-   capture the verbatim `oauth.v2.access` response into `SlackResponseFixtures` (redact the token)
-   — that is what closes GAP-0002 and shrinks GAP-0001.
+3. Read the `renewal` row. `scheduled for …` means Slack issued a rotating credential and OnAir
+   will renew it (ADR-0020); `not needed — Slack issued no expiry` means this app's tokens do not
+   rotate. Capture the `oauth.v2.access` response into `SlackResponseFixtures` with both credential
+   values replaced by placeholders — A4 outranks the verbatim rule — which shrinks GAP-0001.
+4. **The next day**, `make doctor-slack` again without touching anything. A clean answer past the
+   original expiry is what closes GAP-0002; `token_expired` means the renewal loop did not work
+   and the ADR's untested assumption — the renewal response's shape for a *user* token — is the
+   first place to look.
+
+If the app turns out to issue rotating tokens, check **OAuth & Permissions → Token Rotation** in
+the dashboard. It cannot be turned off once on, so the only way back to non-rotating credentials is
+a new app and a new `builtInClientID` — worth doing, but it is not urgent while renewal works.
 
 ## Lifecycle afterwards
 

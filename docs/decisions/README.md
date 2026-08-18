@@ -24,6 +24,7 @@ outlives its plan gets a record here; a question with no answer gets a [gap](../
 | [0017](0017-distribute-through-a-personal-tap.md) | Distribute through a personal tap, as a notarized zip, released locally |
 | [0018](0018-release-from-ci-on-every-push-to-main.md) | Release from CI on every push to main, with the signing key in repository secrets |
 | [0019](0019-the-callback-lands-on-a-page-we-host.md) | The callback lands on a page we host |
+| [0020](0020-renew-the-rotating-token-rather-than-the-human.md) | Renew the rotating token, rather than the human |
 
 ## Format
 

@@ -34,6 +34,25 @@ final class AppCoordinator {
     @ObservationIgnored private var pumpAgain = false
     @ObservationIgnored private var retryDelay: TimeInterval = AppCoordinator.minimumRetry
 
+    /// The credential the `client` was built from, kept beside it because the client is a value
+    /// and cannot say when what it holds expires (ADR-0020).
+    @ObservationIgnored private var credential: SlackCredential?
+    /// Single-flight. Slack's refresh tokens are single-use, so two renewals racing burn the chain
+    /// and cost the user a reconnect — every caller awaits the same one.
+    @ObservationIgnored private var renewalTask: Task<Bool, Never>?
+    @ObservationIgnored private var renewalWakeTask: Task<Void, Never>?
+    /// Renewals that never reached Slack back off like every other retry. A flat 15 seconds
+    /// against a laptop that is simply offline writes four history lines a minute into a history
+    /// that holds thirty.
+    @ObservationIgnored private var renewalRetry: TimeInterval = AppCoordinator.minimumRetry
+    /// One warning per credential, not one per pass: a credential that expires and cannot be
+    /// renewed is worth saying once, and worth nothing at all repeated thirty times into a history
+    /// that holds thirty lines.
+    @ObservationIgnored private var reportedUnrenewable = false
+    /// Bumped every time the credential is replaced. A call that fails with `token_expired` reads
+    /// this to tell "my credential is stale" from "somebody already renewed while I was waiting".
+    @ObservationIgnored private var credentialGeneration = 0
+
     // Internal rather than private only because `AppCoordinator+Notifications.swift` is a separate
     // file, and Swift's `private` does not reach across one. Nothing outside the coordinator may
     // touch these: the snooze bookkeeping is the difference between handing back a Do Not Disturb
@@ -85,6 +104,10 @@ final class AppCoordinator {
     /// gets whatever time the run loop has left rather than a guarantee — which is exactly why
     /// there is no other safety net and why the README says so (ADR-0009).
     func restoreBeforeQuit() async {
+        // The same reason `disconnect` renews first, with less time to do it in: a credential that
+        // expired while the laptop was shut is the difference between a status put back and one
+        // left on for the rest of the day.
+        await renewIfDue()
         guard let client else { return }
         await releaseSnoozeIfOwned(using: client)
         guard let previous = engine.appliedPrevious else { return }
@@ -112,22 +135,24 @@ final class AppCoordinator {
     // MARK: - Slack connection
 
     func reloadClient() {
-        // The token outranks the client id: a connected app stays connected even if the id that
-        // bought the token is gone, because the id is only needed to mint the *next* token.
-        guard let token = TokenStore.token() else {
-            client = nil
+        // The stored credential outranks the client id: a connected app stays connected even if
+        // the id that bought it is gone. The id is needed to mint the *next* one — which, since
+        // ADR-0020, includes every renewal, so an id that disappears is a slow disconnection
+        // rather than none at all. `renew` says so when it happens.
+        guard let stored = TokenStore.credential() else {
+            forgetCredential()
             connection = resolvedClientID() == nil ? .notConfigured : .disconnected
             return
         }
-        client = SlackClient(token: token)
+        adopt(stored)
         Task { await confirmIdentity() }
     }
 
     private func confirmIdentity() async {
-        guard let client else { return }
+        guard client != nil else { return }
         connection = .connecting
         do {
-            connection = try await .connected(client.identity())
+            connection = try await .connected(callSlack { try await $0.identity() })
             pump()
         } catch let error as SlackError {
             connection = error.requiresReconnect
@@ -140,6 +165,175 @@ final class AppCoordinator {
         }
     }
 
+    // MARK: - Keeping the credential alive (ADR-0020)
+
+    private func adopt(_ credential: SlackCredential) {
+        self.credential = credential
+        client = SlackClient(token: credential.accessToken)
+        credentialGeneration += 1
+        reportedUnrenewable = false
+    }
+
+    private func forgetCredential() {
+        credential = nil
+        client = nil
+        credentialGeneration += 1
+        renewalWakeTask?.cancel()
+        renewalWakeTask = nil
+        renewalTask?.cancel()
+        reportedUnrenewable = false
+    }
+
+    /// Every Slack call goes through here, so there is one answer to "is the credential still
+    /// good?" instead of one per call site.
+    ///
+    /// Two chances, because a rotating token can expire between the check and the answer: renew if
+    /// the plan says it is due, and renew once more if Slack says `token_expired` anyway. The
+    /// second is not belt-and-braces — the machine can sleep between the two lines.
+    ///
+    /// The generation check is what stops two calls that expired together from renewing twice.
+    /// Slack's refresh tokens are single-use, so the second renewal is not merely wasted work: it
+    /// spends the token the first one just minted, and every extra rotation is another chance to
+    /// lose the chain to a crash or a dropped connection.
+    private func callSlack<T>(_ work: (SlackClient) async throws -> T) async throws -> T {
+        await renewIfDue()
+        guard let client else { throw SlackError.api(code: "not_authed") }
+        let generation = credentialGeneration
+        do {
+            return try await work(client)
+        } catch SlackError.api(code: "token_expired") {
+            if credentialGeneration == generation, await renew() == false {
+                throw SlackError.api(code: "token_expired")
+            }
+            guard let renewed = self.client else { throw SlackError.api(code: "token_expired") }
+            return try await work(renewed)
+        }
+    }
+
+    /// What `TokenRefresh.plan` says, performed. The decision itself is a pure function in the kit
+    /// so it can be tested without a Keychain or a network (A3).
+    private func renewIfDue() async {
+        guard let credential else { return }
+        switch TokenRefresh.plan(for: credential, now: Date()) {
+        case .noExpiry:
+            renewalWakeTask?.cancel()
+            renewalWakeTask = nil
+        case .refreshNow:
+            _ = await renew()
+        case let .refreshAt(date):
+            scheduleRenewal(at: date)
+        case let .cannotRenew(expiresAt):
+            guard !reportedUnrenewable else { return }
+            reportedUnrenewable = true
+            note(
+                "Slack issued a credential that expires \(Self.when(expiresAt)) and gave OnAir "
+                    + "no way to renew it — you will have to reconnect then.",
+                level: .warning
+            )
+        }
+    }
+
+    @discardableResult
+    private func renew() async -> Bool {
+        if let renewalTask {
+            return await renewalTask.value
+        }
+        let task = Task { @MainActor in await performRenewal() }
+        renewalTask = task
+        let renewed = await task.value
+        renewalTask = nil
+        return renewed
+    }
+
+    private func performRenewal() async -> Bool {
+        guard let refresh = credential?.refreshToken else { return false }
+        guard let source = resolvedClientID() else {
+            note(
+                "Cannot renew the Slack connection: this build has no Slack app id.",
+                level: .failure
+            )
+            return false
+        }
+        do {
+            let renewed = try await SlackOAuth.renew(refreshToken: refresh, clientID: source.id)
+            do {
+                try TokenStore.saveCredential(renewed)
+            } catch {
+                // The renewed credential works for this session either way, so OnAir keeps it —
+                // but the refresh token that came with it is now the only one Slack will accept
+                // and it is not on disk. Saying so is the difference between "reconnect at the
+                // next launch for no visible reason" and a line that explains it.
+                note(
+                    "Renewed the Slack connection, but could not save it to the Keychain — "
+                        + "you may have to reconnect after quitting.",
+                    level: .warning
+                )
+            }
+            adopt(renewed)
+            renewalRetry = Self.minimumRetry
+            scheduleRenewalIfWanted(for: renewed)
+            // A call the user did not ask for, touching the thing that keeps OnAir connected. It
+            // says so — a background credential rotation that leaves no trace is indistinguishable
+            // from one that never ran when someone comes to work out why they were logged out.
+            note("Renewed the Slack connection.")
+            return true
+        } catch let error as SlackError {
+            reportRenewalFailure(error)
+            return false
+        } catch {
+            note("Could not reach Slack to renew the connection.", level: .warning)
+            scheduleRenewalRetry()
+            return false
+        }
+    }
+
+    /// A renewal Slack *refuses* is the end of the chain — the refresh token is spent, revoked or
+    /// past its 30 days, and only a human can fix it. A renewal that never reached Slack is a
+    /// different thing entirely: the current credential is still valid until its expiry, so OnAir
+    /// keeps it and tries again rather than declaring a disconnection over a dropped Wi-Fi.
+    private func reportRenewalFailure(_ error: SlackError) {
+        switch error {
+        case let .rateLimited(retryAfter):
+            note(error.summary, level: .warning)
+            scheduleRenewal(at: Date().addingTimeInterval(retryAfter))
+        case .transport, .http, .malformedResponse:
+            note("Could not renew the Slack connection: \(error.summary)", level: .warning)
+            scheduleRenewalRetry()
+        case .api:
+            connection = .needsReconnect(error.summary)
+            note(
+                "Slack would not renew the connection (\(error.summary)) — reconnect from Settings.",
+                level: .failure
+            )
+        }
+    }
+
+    private func scheduleRenewalIfWanted(for credential: SlackCredential) {
+        if case let .refreshAt(date) = TokenRefresh.plan(for: credential, now: Date()) {
+            scheduleRenewal(at: date)
+        }
+    }
+
+    /// Separate from `scheduleWake`: that one drives the status machine, and a renewal that
+    /// cancelled a pending restore would leave a status set for the length of a token's life.
+    private func scheduleRenewalRetry() {
+        scheduleRenewal(at: Date().addingTimeInterval(renewalRetry))
+        renewalRetry = min(renewalRetry * 2, Self.maximumRetry)
+    }
+
+    private func scheduleRenewal(at date: Date) {
+        renewalWakeTask?.cancel()
+        renewalWakeTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(max(0, date.timeIntervalSinceNow)))
+            guard !Task.isCancelled else { return }
+            await renewIfDue()
+        }
+    }
+
+    private static func when(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
     func connect() async {
         guard let source = resolvedClientID() else {
             note("This build has no Slack app id — add one in Settings.", level: .warning)
@@ -150,7 +344,7 @@ final class AppCoordinator {
             let session = try SlackOAuthSession(clientID: source.id)
             openInBrowser(session.authorizationURL)
             note("Waiting for Slack in your browser…")
-            try await TokenStore.saveToken(session.awaitToken())
+            try await TokenStore.saveCredential(session.awaitCredential())
             reloadClient()
         } catch let error as LoopbackReceiver.Failure {
             connection = .disconnected
@@ -167,6 +361,10 @@ final class AppCoordinator {
     /// Disconnecting puts the status back first. Dropping the token while OnAir still holds the
     /// status would strand it with nothing left that could restore it.
     func disconnect() async {
+        // Before anything is read or written: an expired credential here would fail the ownership
+        // check, and the branch that takes is "leave the status alone" — stranding the very status
+        // this method exists to put back (ADR-0020).
+        await renewIfDue()
         if let client {
             await releaseSnoozeIfOwned(using: client)
             if let previous = engine.appliedPrevious {
@@ -191,8 +389,8 @@ final class AppCoordinator {
         }
         engine.forgetOwnership()
         snoozeOwnership.recordEnded()
-        TokenStore.deleteToken()
-        client = nil
+        TokenStore.deleteCredential()
+        forgetCredential()
         connection = resolvedClientID() == nil ? .notConfigured : .disconnected
         note("Disconnected from Slack.")
     }
@@ -240,7 +438,7 @@ final class AppCoordinator {
     }
 
     private func perform(_ work: (SlackClient) async throws -> Void) async {
-        guard let client, connection.isConnected else {
+        guard client != nil, connection.isConnected else {
             // Not an error worth a history line on every tick: the menu already says "not
             // connected", and repeating it once a second would bury everything else.
             return
@@ -248,7 +446,7 @@ final class AppCoordinator {
         isBusy = true
         defer { isBusy = false }
         do {
-            try await work(client)
+            try await callSlack(work)
             retryDelay = Self.minimumRetry
         } catch let error as SlackError {
             engine.recordFailed()

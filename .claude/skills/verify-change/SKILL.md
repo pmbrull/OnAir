@@ -54,7 +54,8 @@ SAME reason, stop and use `harness-gap` instead of hand-fixing.
 - `ls ~/Library/Application\ Support/OnAir` — nothing should accumulate. A `loopback.p12` there
   predates ADR-0019 and is no longer written or read; a *new* one means a certificate came back.
 - `ls $TMPDIR | grep onair` = empty. Leftovers mean a path escaped.
-- No new Keychain items beyond `slack-token` and `slack-client` under `io.umamidata.onair`.
+- No new Keychain items beyond `slack-token`, `slack-renewal` (ADR-0020) and `slack-client` under
+  `io.umamidata.onair`.
 
 ## 5. Pre-merge self-review by subagents — MANDATORY
 

@@ -65,8 +65,10 @@ redirect URL
 (`https://onair.pmbrull.me/callback/` — a static page in this repository that hands the callback
 back to OnAir on your Mac; Slack rejects `http://`, which is why it cannot simply be the loopback,
 ADR-0019), PKCE on
-(public client, one-way — no secret is ever used), and **token rotation off** — rotation would
-expire every token in hours, and OnAir has no refresh loop (GAP-0002).
+(public client, one-way — no secret is ever used), and **token rotation off** — rotation expires
+every token after twelve hours. OnAir renews a rotating credential itself (ADR-0020), so either
+setting works; rotation off is still preferable, because a rotating credential is dead for good
+after thirty days unused, and Slack will not let you turn rotation back off once it is on.
 
 Then: **Basic Information** → **App Credentials** → copy the **Client ID** — only the id — into
 Settings, press Save, and Connect as above.
@@ -85,9 +87,13 @@ your status (ADR-0011).
 make doctor-slack
 ```
 
-adds one read-only Slack round trip: who you are, which workspace, your current status. This run is
-also what closes GAP-0002 — note which endpoint answered the exchange and whether the response
-carried an `expires_in`.
+adds one read-only Slack round trip: who you are, which workspace, your current status — and a
+`renewal` row saying what OnAir would do about the credential's expiry. Doctor never renews
+anything itself; it says so when the app would.
+
+That row is what GAP-0002 now turns on. `scheduled for …` means Slack issued a rotating credential
+and OnAir will keep it alive; `not needed — Slack issued no expiry` means this app's tokens do not
+rotate. The gap closes when a credential has outlived its own expiry with nobody touching it.
 
 ## 4. Try it
 

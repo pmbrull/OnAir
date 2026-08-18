@@ -45,7 +45,7 @@ version from the commit subject, build, sign, notarize, tag, publish, push the c
 (ADR-0018, `docs/runbooks/release.md`). Nothing outside the runner is touched until notarization has
 passed, so a failed build leaves no bumped version and no orphan tag.
 
-## The seven things most likely to trip you up
+## The eight things most likely to trip you up
 
 1. **`swift test` does not work here; `make test` does.** XCTest ships with Xcode, not the Command
    Line Tools, so the suite is written against Swift Testing — which CLT ships on no default search
@@ -83,6 +83,14 @@ passed, so a failed build leaves no bumped version and no orphan tag.
    `docs:`/`chore:`/`ci:`/`test:`/`refactor:`/`style:`/`build:` ship nothing at all. A subject that is
    not a Conventional Commit **fails the release job** rather than defaulting to a patch (ADR-0018).
    `make version-rule` is the table; two commits already in this history would fail it.
+8. **The stored credential expires, and OnAir renews it.** Measured 2026-08-18: a credential minted
+   five days earlier answered `token_expired`, which is what a *rotating* token does after twelve
+   hours — so the shared app issues rotating tokens whatever its manifest asked for. Since ADR-0020
+   the exchange is parsed whole (`expires_in`, `refresh_token`), the refresh token lives in a second
+   Keychain item written *before* the access token, and `TokenRefresh.plan` decides when to renew.
+   Two rules a change here must not break: renewals are **single-flight** (Slack's refresh tokens
+   are single-use, so two racing renewals burn the chain), and a renewal Slack *refuses* is a
+   disconnection while one that never *reached* Slack is not.
 
 ## Hard rules
 
@@ -110,9 +118,17 @@ passed, so a failed build leaves no bumped version and no orphan tag.
 
 ## Current state
 
-v0.2. Everything described above is built and the gate is green: 112 tests in 13 suites, including a
+v0.3. Everything described above is built and the gate is green: 127 tests in 15 suites, including a
 device journey against this Mac's real hardware and a loopback suite that drives a real listener
 with `URLSession`.
+
+**The credential expires, and OnAir now renews it (ADR-0020).** That is the one thing reality has
+corrected since v0.3 shipped: `make doctor-slack` answered `token_expired` against a five-day-old
+credential, so the shared app's tokens rotate on a twelve-hour clock and the daily "Reconnect Slack"
+was the app having no answer to it. What is **not** yet measured is the renewal itself — the shape
+of a *user* token's renewal response is documented only for bots, both plausible shapes are
+accepted, and neither has been seen. The proof is a next-day `make doctor-slack` with nobody
+touching anything; GAP-0002 carries it.
 
 **The callback moved (ADR-0019) and the certificate is gone.** Slack's redirect URL is now
 `https://onair.pmbrull.me/callback/` — `site/`, deployed by `.github/workflows/pages.yml` — and the
