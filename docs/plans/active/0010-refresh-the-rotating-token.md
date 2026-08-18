@@ -144,6 +144,13 @@ about a status. What A3 forbids is a decision in the **app target**, where nothi
   history line despite the ADR promising one, and two calls that expired together each ran a
   renewal — the second spending the refresh token the first had just minted. A generation counter
   on the credential distinguishes "mine is stale" from "somebody already renewed".
+- 2026-08-18 — CI's lint failed what the local gate could not: `AppCoordinator.swift` reached 579
+  lines (limit 400) and its class body 406 (limit 400). `swiftlint` is installed on this machine but
+  dies at `Loading sourcekitdInProc.framework … failed` — Command Line Tools ship no SourceKit — so
+  `make verify` skips lint and says so, and **CI is the only lint that runs**. The renewal half moved
+  to `AppCoordinator+Connection.swift`, leaving 324 and 283 lines. `connection` kept its
+  `private(set)` through a `report(_:)` door rather than being widened to internal: `private(set)`
+  cannot cross a file, and the alternative would let any view assign a connection state (A3).
 - 2026-08-18 — **Still unmeasured, and the reason this plan is not done:** nothing has renewed
   against the real endpoint. The stored credential predates this change and carries no refresh
   token, so the first measurement needs a human to press Connect once; the second needs the next
