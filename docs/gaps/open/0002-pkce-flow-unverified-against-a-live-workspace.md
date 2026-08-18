@@ -2,7 +2,7 @@
 id: GAP-0002
 title: The PKCE flow and its token longevity are unverified against a live workspace
 status: open
-impact: token longevity is unmeasured, so every token dying at 30 days is possible and unplanned for
+impact: the credential expires (measured), and the renewal that answers it is untested against Slack
 opened: 2026-08-13
 closed_by:
 ---
@@ -21,21 +21,41 @@ closed_by:
 itself is pinned to the RFC 7636 appendix-B vector, and the request shape to tests — but a test of
 our own encoding proves our encoding, not Slack's acceptance of it (`.claude/rules/real-data-tests.md`).
 
-**Blocks.** The claim "connect works end to end". If (1) is wrong, every connect fails at the
-exchange with a Slack error — loud, at least. If (2) is wrong, tokens die after 30 days and OnAir
-needs a refresh-token loop it does not have; the failure mode is `token_expired`, which the menu
-already surfaces as "Reconnect Slack", so it degrades to an inconvenience rather than a silence.
+**Blocks.** The claim "a connection made once keeps working". (1) is answered. (2) turned out to be
+wrong in the direction that costs the user a login every morning, which is why ADR-0020 exists; what
+is left is whether the renewal loop that answers it works against the real endpoint. If it does not,
+the failure mode is the one that was already there — `token_expired`, surfaced as "Reconnect Slack"
+— so this degrades to the previous inconvenience rather than to a silence.
 
 **Measured so far (2026-08-13, `make doctor-slack` against Collate).** A stored user token answered
-`auth.test` and `users.profile.get`. That token can only have come from `session.awaitToken()` —
-`TokenStore.saveToken` has exactly one caller — and `SlackOAuth` posts the exchange to exactly one
+`auth.test` and `users.profile.get`. That token can only have come from the OAuth session —
+`TokenStore` is written from exactly one place — and `SlackOAuth` posts the exchange to exactly one
 endpoint, so **question (1) is answered**: `oauth.v2.access` accepts a PKCE exchange with no secret,
-in this configuration. Question (2) is untouched: nothing has looked for `expires_in` in that
-response and thirty days have not passed. It is also not a capture — the exchange response was never
-written into `SlackResponseFixtures`.
+in this configuration.
 
-**Provisional handling.** Built to the PKCE walkthrough's letter. Close by: create the shared app
-with PKCE on, `make doctor-slack` after a real connect, note the endpoint that answered and —
-after 30 days, or by checking `oauth.v2.access`'s response for `expires_in` — whether the token
-carries an expiry. Record the verbatim exchange response into `SlackResponseFixtures` while there
-(that also shrinks GAP-0001).
+**Question (2) is answered, and the answer is the bad one (2026-08-18).** The same credential, five
+days later:
+
+```
+  user credential       present in the Keychain
+  Slack refused the call: token_expired
+```
+
+The credential **expires**. `token_expired` is what a rotating token answers past its twelve hours,
+so the plan behind ADR-0012 — "non-expiring with an https redirect and rotation off" — does not
+describe what this app actually issues. Whether that is `token_rotation_enabled` being on despite
+the manifest, or an expiry imposed some other way, is **not** decidable from here: nothing in this
+repository can read that toggle.
+
+**Handling (ADR-0020).** OnAir now stores `expires_in` and `refresh_token` and renews the credential
+itself, which is correct under either cause. Two things remain unmeasured, and they are what keeps
+this gap open:
+
+1. **The renewal response's shape for a *user* token.** Slack documents it for bot tokens, at the
+   top level; the parser accepts that and the `authed_user` wrapping, and neither has been seen.
+2. **That renewal actually works end to end.** Every test can pass while the real call fails.
+
+**Close by:** connect once, then run `make doctor-slack` again the following day without touching
+anything. A clean answer past the original expiry closes this. Capture the exchange and the renewal
+into `SlackResponseFixtures` with both credential values replaced by placeholders — A4 outranks the
+verbatim half of `.claude/rules/real-data-tests.md` — which also shrinks GAP-0001.

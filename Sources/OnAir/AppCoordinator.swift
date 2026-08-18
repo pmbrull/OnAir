@@ -19,6 +19,15 @@ final class AppCoordinator {
     private(set) var history: [ActivityEntry] = []
     private(set) var isBusy = false
 
+    /// The one door to `connection` for the coordinator's other files.
+    ///
+    /// `private(set)` cannot reach across a file, and dropping it to internal would let any view
+    /// assign a connection state — the app performing a decision it did not make (A3). A named
+    /// method keeps the compiler enforcing that only the coordinator says what "connected" means.
+    func report(_ state: ConnectionState) {
+        connection = state
+    }
+
     var policy: StatusPolicy {
         didSet {
             guard policy != oldValue else { return }
@@ -27,23 +36,45 @@ final class AppCoordinator {
         }
     }
 
-    @ObservationIgnored private var engine = StatusEngine()
     @ObservationIgnored private let watcher = DeviceWatcher()
     @ObservationIgnored private var wakeTask: Task<Void, Never>?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
     @ObservationIgnored private var pumpAgain = false
     @ObservationIgnored private var retryDelay: TimeInterval = AppCoordinator.minimumRetry
 
-    // Internal rather than private only because `AppCoordinator+Notifications.swift` is a separate
-    // file, and Swift's `private` does not reach across one. Nothing outside the coordinator may
-    // touch these: the snooze bookkeeping is the difference between handing back a Do Not Disturb
-    // OnAir started and stamping on one the user set by hand (ADR-0013).
+    // Internal rather than private only because the coordinator is spread over three files —
+    // `AppCoordinator+Connection.swift` (ADR-0020) and `AppCoordinator+Notifications.swift`
+    // (ADR-0013) — and Swift's `private` does not reach across one. Extensions cannot hold stored
+    // properties, so these stay here. Nothing outside the coordinator may touch them: the snooze
+    // bookkeeping is the difference between handing back a Do Not Disturb OnAir started and
+    // stamping on one the user set by hand, and the engine is the state machine everything else
+    // reports to.
+    @ObservationIgnored var engine = StatusEngine()
     @ObservationIgnored var client: SlackClient?
     @ObservationIgnored var snoozeOwnership = SnoozeOwnership()
     @ObservationIgnored var snoozeRenewalTask: Task<Void, Never>?
 
-    private static let minimumRetry: TimeInterval = 15
-    private static let maximumRetry: TimeInterval = 300
+    /// The credential the `client` was built from, kept beside it because the client is a value
+    /// and cannot say when what it holds expires (ADR-0020).
+    @ObservationIgnored var credential: SlackCredential?
+    /// Single-flight. Slack's refresh tokens are single-use, so two renewals racing burn the chain
+    /// and cost the user a reconnect — every caller awaits the same one.
+    @ObservationIgnored var renewalTask: Task<Bool, Never>?
+    @ObservationIgnored var renewalWakeTask: Task<Void, Never>?
+    /// Renewals that never reached Slack back off like every other retry. A flat 15 seconds
+    /// against a laptop that is simply offline writes four history lines a minute into a history
+    /// that holds thirty.
+    @ObservationIgnored var renewalRetry: TimeInterval = AppCoordinator.minimumRetry
+    /// One warning per credential, not one per pass: a credential that expires and cannot be
+    /// renewed is worth saying once, and worth nothing at all repeated thirty times into a history
+    /// that holds thirty lines.
+    @ObservationIgnored var reportedUnrenewable = false
+    /// Bumped every time the credential is replaced. A call that fails with `token_expired` reads
+    /// this to tell "my credential is stale" from "somebody already renewed while I was waiting".
+    @ObservationIgnored var credentialGeneration = 0
+
+    static let minimumRetry: TimeInterval = 15
+    static let maximumRetry: TimeInterval = 300
     private static let historyLimit = 30
 
     /// One instance, reached by both scenes and the app delegate. A `@State` coordinator per scene
@@ -85,6 +116,10 @@ final class AppCoordinator {
     /// gets whatever time the run loop has left rather than a guarantee — which is exactly why
     /// there is no other safety net and why the README says so (ADR-0009).
     func restoreBeforeQuit() async {
+        // The same reason `disconnect` renews first, with less time to do it in: a credential that
+        // expired while the laptop was shut is the difference between a status put back and one
+        // left on for the rest of the day.
+        await renewIfDue()
         guard let client else { return }
         await releaseSnoozeIfOwned(using: client)
         guard let previous = engine.appliedPrevious else { return }
@@ -109,94 +144,6 @@ final class AppCoordinator {
         pump()
     }
 
-    // MARK: - Slack connection
-
-    func reloadClient() {
-        // The token outranks the client id: a connected app stays connected even if the id that
-        // bought the token is gone, because the id is only needed to mint the *next* token.
-        guard let token = TokenStore.token() else {
-            client = nil
-            connection = resolvedClientID() == nil ? .notConfigured : .disconnected
-            return
-        }
-        client = SlackClient(token: token)
-        Task { await confirmIdentity() }
-    }
-
-    private func confirmIdentity() async {
-        guard let client else { return }
-        connection = .connecting
-        do {
-            connection = try await .connected(client.identity())
-            pump()
-        } catch let error as SlackError {
-            connection = error.requiresReconnect
-                ? .needsReconnect(error.summary)
-                : .disconnected
-            note(error.summary, level: .failure)
-        } catch {
-            connection = .disconnected
-            note("Could not reach Slack.", level: .failure)
-        }
-    }
-
-    func connect() async {
-        guard let source = resolvedClientID() else {
-            note("This build has no Slack app id — add one in Settings.", level: .warning)
-            return
-        }
-        connection = .connecting
-        do {
-            let session = try SlackOAuthSession(clientID: source.id)
-            openInBrowser(session.authorizationURL)
-            note("Waiting for Slack in your browser…")
-            try await TokenStore.saveToken(session.awaitToken())
-            reloadClient()
-        } catch let error as LoopbackReceiver.Failure {
-            connection = .disconnected
-            note(error.summary, level: .failure)
-        } catch let error as SlackError {
-            connection = .disconnected
-            note(error.summary, level: .failure)
-        } catch {
-            connection = .disconnected
-            note("Could not complete the Slack connection.", level: .failure)
-        }
-    }
-
-    /// Disconnecting puts the status back first. Dropping the token while OnAir still holds the
-    /// status would strand it with nothing left that could restore it.
-    func disconnect() async {
-        if let client {
-            await releaseSnoozeIfOwned(using: client)
-            if let previous = engine.appliedPrevious {
-                // The same ADR-0008 check the restore and the quit paths make. Without it this is
-                // the one path that writes blind — and since ADR-0015 a blind write over a stash
-                // whose expiry has passed writes a *clear*, deleting a status the user typed by
-                // hand rather than merely replacing it.
-                do {
-                    let live = try await client.currentStatus()
-                    if engine.stillOwns(live) {
-                        try await putBack(previous, using: client)
-                    } else {
-                        note("Your status had changed — left it as it is.", level: .warning)
-                    }
-                } catch {
-                    note(
-                        "Could not put your status back before disconnecting.",
-                        level: .failure
-                    )
-                }
-            }
-        }
-        engine.forgetOwnership()
-        snoozeOwnership.recordEnded()
-        TokenStore.deleteToken()
-        client = nil
-        connection = resolvedClientID() == nil ? .notConfigured : .disconnected
-        note("Disconnected from Slack.")
-    }
-
     // MARK: - The loop
 
     /// Coalescing rather than dropping: a device change that arrives while a Slack call is in
@@ -214,10 +161,6 @@ final class AppCoordinator {
                 await performOnePass()
             } while pumpAgain
         }
-    }
-
-    private func openInBrowser(_ url: URL) {
-        NSWorkspace.shared.open(url)
     }
 
     private func performOnePass() async {
@@ -240,7 +183,7 @@ final class AppCoordinator {
     }
 
     private func perform(_ work: (SlackClient) async throws -> Void) async {
-        guard let client, connection.isConnected else {
+        guard client != nil, connection.isConnected else {
             // Not an error worth a history line on every tick: the menu already says "not
             // connected", and repeating it once a second would bury everything else.
             return
@@ -248,7 +191,7 @@ final class AppCoordinator {
         isBusy = true
         defer { isBusy = false }
         do {
-            try await work(client)
+            try await callSlack(work)
             retryDelay = Self.minimumRetry
         } catch let error as SlackError {
             engine.recordFailed()
@@ -332,7 +275,7 @@ final class AppCoordinator {
     /// It writes its own history line rather than returning one, so every caller reports the
     /// outcome — the clear is the surprising branch, and the path that dropped it silently was the
     /// one where the user is still looking at the menu.
-    private func putBack(_ previous: LiveStatus, using client: SlackClient) async throws {
+    func putBack(_ previous: LiveStatus, using client: SlackClient) async throws {
         switch previous.restoration(now: Date()) {
         case let .put(status, expiresAt):
             try await client.setStatus(status, expiresAt: expiresAt)

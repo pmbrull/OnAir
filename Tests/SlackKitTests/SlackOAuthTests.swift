@@ -87,6 +87,23 @@ struct SlackOAuthTests {
         #expect(!body.contains("client_secret"))
     }
 
+    /// ADR-0012's criterion, applied to the call ADR-0020 added: a renewal is still a public
+    /// client presenting no secret. The redirect URI is absent too — there is no redirect in a
+    /// renewal, and Slack compares that string byte for byte whenever it is there.
+    @Test("a renewal presents the refresh token and still sends no secret")
+    func renewalBody() {
+        // Assembled, never written out: `xoxe` is inside the token-literal grep's character class
+        // in `scripts/check-architecture.sh`, and that check cannot tell a fake from a real one.
+        let fake = "xoxe" + "-1-not-a-real-refresh"
+        let body = SlackOAuth.renewalBody(refreshToken: fake, clientID: "123.456")
+        #expect(body.contains("grant_type=refresh_token"))
+        #expect(body.contains("refresh_token=" + fake))
+        #expect(body.contains("client_id=123.456"))
+        #expect(!body.contains("client_secret"))
+        #expect(!body.contains("code_verifier"))
+        #expect(!body.contains("redirect_uri"))
+    }
+
     @Test("a session refuses to start without a client id")
     func missingClientID() {
         #expect(throws: SlackOAuthSession.Failure.noClientID) {

@@ -81,10 +81,13 @@ your workspace, and paste:
 ```
 
 The manifest sets the scopes, the redirect URL, and enables PKCE (which marks the app a public
-client — one-way, and exactly what OnAir needs). It also keeps token rotation **off**; leave it
-off, or every token would expire in hours and OnAir has no refresh loop (GAP-0002). After
-**Create**: **Basic Information → App Credentials** → copy the **Client ID** — only the id — into
-Settings, Save, Connect.
+client — one-way, and exactly what OnAir needs). It also keeps token rotation **off**, which is
+still the setting to prefer: with rotation on, every token expires after twelve hours. OnAir
+renews them for you when that happens (ADR-0020), so you authorise once either way — but a
+rotating credential dies for good if the app goes unused for thirty days, and a non-rotating one
+does not. Note that Slack does not let you turn rotation back off once it is on. After **Create**:
+**Basic Information → App Credentials** → copy the **Client ID** — only the id — into Settings,
+Save, Connect.
 
 **Do not press "Install to Workspace" in Slack's dashboard** — that flow cannot drive a PKCE
 user-scope app and fails with "No scopes requested". Pressing **Connect** in OnAir *is* the

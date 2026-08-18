@@ -124,10 +124,87 @@ struct SlackWireTests {
 
     // MARK: - The token exchange
 
+    /// A fixed instant, so `expires_in` — a duration — can be asserted as the absolute date OnAir
+    /// actually stores.
+    private static let noon = Date(timeIntervalSince1970: 1_700_000_000)
+
     @Test("the user token comes from authed_user")
     func userToken() throws {
-        let token = try SlackWire.userAccessToken(SlackResponseFixtures.oauthAccess, status: 200)
-        #expect(token == SlackResponseFixtures.fakeUserToken)
+        let credential = try SlackWire.credential(SlackResponseFixtures.oauthAccess, status: 200)
+        #expect(credential.accessToken == SlackResponseFixtures.fakeUserToken)
+        // The pre-ADR-0020 shape: no rotation, so nothing to schedule and nothing to renew.
+        #expect(credential.expiresAt == nil)
+        #expect(credential.refreshToken == nil)
+    }
+
+    /// What the shared app issues, and the reason ADR-0020 exists.
+    @Test("a rotating exchange carries the expiry and the refresh token")
+    func rotatingExchange() throws {
+        let credential = try SlackWire.credential(
+            SlackResponseFixtures.oauthAccessRotating,
+            status: 200,
+            now: Self.noon
+        )
+        #expect(credential.accessToken == SlackResponseFixtures.fakeUserToken)
+        #expect(credential.refreshToken == SlackResponseFixtures.fakeRefreshToken)
+        #expect(credential.expiresAt == Self.noon.addingTimeInterval(43200))
+    }
+
+    /// Slack documents the renewal response for bot tokens, where the token is at the top level.
+    /// Whether the user case wraps it in `authed_user` is unmeasured (GAP-0002), so both are
+    /// accepted and both are pinned — the failure otherwise is a renewal that parses as malformed
+    /// and a connection that dies at the twelve-hour mark for no visible reason.
+    @Test("a renewal is read at the top level or under authed_user")
+    func renewalShapes() throws {
+        for (name, data) in [
+            ("top level", SlackResponseFixtures.oauthRenewalTopLevel),
+            ("authed_user", SlackResponseFixtures.oauthRenewalUnderAuthedUser),
+        ] {
+            let credential = try SlackWire.credential(data, status: 200, now: Self.noon)
+            #expect(
+                credential.accessToken == SlackResponseFixtures.fakeUserToken,
+                "\(name) shape lost the access credential"
+            )
+            #expect(
+                credential.refreshToken == SlackResponseFixtures.fakeRefreshToken,
+                "\(name) shape lost the renewal credential"
+            )
+            #expect(
+                credential.expiresAt == Self.noon.addingTimeInterval(43200),
+                "\(name) shape lost the expiry"
+            )
+        }
+    }
+
+    /// The dead end: it expires, and nothing can renew it. Parsing must preserve both facts, since
+    /// the pair is what makes OnAir warn now instead of failing in twelve hours.
+    @Test("an expiry with no refresh token parses, and says so")
+    func expiringWithoutRefresh() throws {
+        let credential = try SlackWire.credential(
+            SlackResponseFixtures.oauthAccessExpiringWithoutRefresh,
+            status: 200,
+            now: Self.noon
+        )
+        #expect(credential.expiresAt == Self.noon.addingTimeInterval(43200))
+        #expect(credential.refreshToken == nil)
+        #expect(
+            TokenRefresh.plan(for: credential, now: Self.noon)
+                == .cannotRenew(expiresAt: Self.noon.addingTimeInterval(43200))
+        )
+    }
+
+    @Test("a quoted expires_in is a number, an unreadable one is malformed")
+    func expiryShapes() throws {
+        let quoted = try SlackWire.credential(
+            SlackResponseFixtures.oauthAccessQuotedExpiry,
+            status: 200,
+            now: Self.noon
+        )
+        #expect(quoted.expiresAt == Self.noon.addingTimeInterval(43200))
+        // Never "nil, so it never expires": that reading disables the renewal loop silently.
+        #expect(throws: SlackError.self) {
+            try SlackWire.credential(SlackResponseFixtures.oauthAccessUnreadableExpiry, status: 200)
+        }
     }
 
     /// Installing the app with bot scopes instead of user scopes is the likeliest setup mistake.
@@ -135,7 +212,7 @@ struct SlackWireTests {
     @Test("a response with only a bot token is rejected")
     func botTokenRejected() {
         #expect(throws: SlackError.self) {
-            try SlackWire.userAccessToken(
+            try SlackWire.credential(
                 SlackResponseFixtures.oauthAccessWithoutUserToken, status: 200
             )
         }
@@ -144,7 +221,7 @@ struct SlackWireTests {
     @Test("a bad code surfaces Slack's own error")
     func badCode() {
         #expect(throws: SlackError.api(code: "invalid_code")) {
-            try SlackWire.userAccessToken(SlackResponseFixtures.error("invalid_code"), status: 200)
+            try SlackWire.credential(SlackResponseFixtures.error("invalid_code"), status: 200)
         }
     }
 

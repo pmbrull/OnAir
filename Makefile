@@ -243,6 +243,8 @@ uninstall: ## Remove the app, its Keychain items and its application-support dir
 	@./scripts/purge-loopback-keychain.sh --apply
 	@security delete-generic-password -s "$(BUNDLE_ID)" -a slack-token >/dev/null 2>&1 \
 	  && echo "removed the Slack token from the Keychain" || true
+	@security delete-generic-password -s "$(BUNDLE_ID)" -a slack-renewal >/dev/null 2>&1 \
+	  && echo "removed the Slack renewal record from the Keychain" || true
 	@security delete-generic-password -s "$(BUNDLE_ID)" -a slack-client >/dev/null 2>&1 \
 	  && echo "removed the Slack client credentials from the Keychain" || true
 	@rm -rf "$$HOME/Library/Application Support/$(APP_NAME)"

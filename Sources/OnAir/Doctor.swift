@@ -123,8 +123,14 @@ enum Doctor {
         case nil: "missing — no built-in id in this build and none pasted"
         }
         print("  \(pad("client id", 22))\(clientID)")
-        let hasStored = TokenStore.token() != nil
-        print("  \(pad("user credential", 22))\(hasStored ? "present in the Keychain" : "missing")")
+        let stored = TokenStore.credential()
+        print(
+            "  \(pad("user credential", 22))"
+                + (stored == nil ? "missing" : "present in the Keychain")
+        )
+        if let stored {
+            print("  \(pad("renewal", 22))\(describe(renewalOf: stored))")
+        }
         print("  \(pad("redirect URL", 22))\(SlackOAuth.redirectURI)")
         print("  \(pad("callback port", 22))\(SlackOAuth.defaultPort) (loopback, plain HTTP)")
 
@@ -132,12 +138,19 @@ enum Doctor {
             print("\n  (pass --slack for one read-only round trip against these)")
             return
         }
-        guard let stored = TokenStore.token() else {
+        guard let stored else {
             print("\n  cannot reach Slack: nothing stored. Connect from Settings first.")
             return
         }
+        // Doctor renews nothing — it is the read-only command, and a diagnostic that quietly
+        // rotated the user's credential would change the thing it was asked to report on. It says
+        // so instead, because `token_expired` from a credential the app would have renewed reads
+        // as a broken connection when it is not (ADR-0020).
+        if case .refreshNow = TokenRefresh.plan(for: stored, now: Date()) {
+            print("\n  (the app would renew this before calling; doctor does not)")
+        }
 
-        let client = SlackClient(token: stored)
+        let client = SlackClient(token: stored.accessToken)
         do {
             let identity = try await client.identity()
             print("  \(pad("identity", 22))\(identity.userName) in \(identity.teamName)")
@@ -170,6 +183,35 @@ enum Doctor {
 
     private static func yesNo(_ value: Bool) -> String {
         value ? "yes" : "no"
+    }
+
+    /// What OnAir would do about the stored credential's expiry, asked of `TokenRefresh` rather
+    /// than re-derived — doctor's contract is "what the app would decide" (A3), and the unreadable
+    /// case is called out separately because it is a bug in OnAir rather than a state Slack put
+    /// the user in (ADR-0020).
+    private static func describe(renewalOf credential: SlackCredential) -> String {
+        switch TokenRefresh.plan(for: credential, now: Date()) {
+        case .noExpiry:
+            // Two different facts reach `.noExpiry`, and only one of them is reassuring. A
+            // credential stored before ADR-0020 has no record at all, so nothing here knows
+            // whether it expires — and on the machine this feature came from, it did.
+            switch TokenStore.renewalRecord() {
+            case .absent:
+                return "unknown — stored before OnAir could renew; reconnect to find out"
+            case .unreadable:
+                return "record unreadable — OnAir cannot renew; reconnect to replace it"
+            case .present:
+                return "not needed — Slack issued no expiry"
+            }
+        case .refreshNow:
+            return "due now — the app renews before its next call"
+        case let .refreshAt(date):
+            let when = date.formatted(date: .abbreviated, time: .shortened)
+            return "scheduled for \(when)"
+        case let .cannotRenew(expiresAt):
+            let when = expiresAt.formatted(date: .abbreviated, time: .shortened)
+            return "impossible — expires \(when) and Slack sent nothing to renew it with"
+        }
     }
 
     /// Asks `LiveStatus` rather than comparing the timestamp here. Doctor's contract is "what the
