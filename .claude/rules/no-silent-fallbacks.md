@@ -6,8 +6,8 @@ paths:
 # A fallback must say it fell back
 
 **Constraint.** Any path that degrades — cannot reach Slack, cannot read a device name, cannot
-register the login item, cannot mint a certificate — must surface that where the user and the next
-agent can see it. In the app that means an `ActivityEntry` in the menu's history, or visible text
+register the login item, cannot bind the callback port — must surface that where the user and the
+next agent can see it. In the app that means an `ActivityEntry` in the menu's history, or visible text
 in Settings. Never a swallowed `try?` on a path the user is waiting on.
 
 **Why.** OnAir's worst failure is not a crash. It is a status that quietly does not change while

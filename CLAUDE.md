@@ -13,7 +13,7 @@ running — so it needs no camera permission and never appears in Privacy & Secu
 | Doc | When |
 |---|---|
 | [`docs/agent-workflow.md`](docs/agent-workflow.md) | **Before any change.** The loop, and the harness-gap valve. |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Before touching module boundaries. Invariants A1–A6. |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Before touching module boundaries. Invariants A1–A7. |
 | [`docs/dev-loop.md`](docs/dev-loop.md) | How to build, run and exercise it — including the XCTest quirk. |
 | [`docs/index.md`](docs/index.md) | The map of everything else. |
 | [`.claude/rules/`](.claude/rules/) | The four conventions a reviewer will hold you to. |
@@ -134,9 +134,19 @@ touching anything; GAP-0002 carries it.
 `https://onair.pmbrull.me/callback/` — `site/`, deployed by `.github/workflows/pages.yml` — and the
 relay was measured before the app was touched: a headless browser through the real page reached a
 real listener with `code` and `state` intact, for the default port, for a port carried in `state`,
-and for a decline; a callback with no parameters reached nothing. What is **not** yet measured is
-one live **Connect to Slack** end to end against a real workspace with the new redirect URL
-registered. Until that has run, "no warning" is a property of the design, not an observation.
+and for a decline; a callback with no parameters reached nothing.
+
+**The domain is now live, and getting there was the part no workflow could do** (2026-08-22). The
+first real connect attempt failed at Slack's authorise page — `redirect_uri did not match any
+configured URIs` — because the shared app predated ADR-0019, and behind that sat two more missing
+steps: no DNS record for `onair.pmbrull.me` at all, and no custom domain claimed on the repository.
+`site/CNAME` does not claim it; Pages here is workflow-built and ignores the artefact's CNAME file.
+Both are fixed and the page answers `200` under a Let's Encrypt certificate.
+[`docs/runbooks/callback-domain.md`](docs/runbooks/callback-domain.md) is the procedure. **A7 was
+green throughout** — it compares two files in this repository and can see neither DNS nor the Pages
+setting, which is GAP-0004. What is **still** not measured is one live **Connect to Slack** end to
+end against a real workspace. Until that has run, "no warning" is a property of the design, not an
+observation.
 
 What is **partly** verified against reality is Slack's side of the wire. One live
 `users.profile.get` (2026-08-13, `make doctor-slack` against Collate) parsed cleanly, which pins

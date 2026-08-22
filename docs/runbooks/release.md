@@ -151,8 +151,11 @@ then.
   ([shared-app runbook §3](shared-app.md)) — without it, every workspace except the app's home
   fails to connect with `invalid_team_for_non_distributed_app`. The app registration itself never
   changes per release.
-- **First-run UX.** A brew-installed user's first Connect still hits the self-signed-certificate
-  warning; [first-run.md](first-run.md) is the page to link from release notes.
+- **First-run UX.** A brew-installed user's first Connect goes out through
+  `https://onair.pmbrull.me/callback/` and straight back, with nothing to click through since
+  ADR-0019 — which also means a release depends on that domain resolving and Pages serving it
+  ([callback-domain.md](callback-domain.md)). [first-run.md](first-run.md) is the page to link from
+  release notes.
 - **Squash-only merges, titled from the PR.** The bump rule reads the subject of the commit that
   lands on `main`, so which commit that is has to be predictable:
 

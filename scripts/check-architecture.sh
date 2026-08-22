@@ -130,8 +130,11 @@ if [ -f "$relay" ]; then
         fail "$relay does not hand back to $swift_path (A7, ADR-0019)"
 fi
 if [ -f site/CNAME ]; then
-    # The domain is asserted from the CNAME file rather than written out again here: the file is
-    # what GitHub Pages actually serves the site under, so it is the one that can be wrong.
+    # The domain is asserted from the CNAME file rather than written out again here: it is the one
+    # place in this repository that names the host. It does not *claim* the host — Pages here is
+    # workflow-built, so GitHub ignores the CNAME file in the artefact and the claim is a repository
+    # setting (docs/runbooks/callback-domain.md §2). This proves the two strings agree; only a live
+    # curl proves the domain is served.
     domain=$(tr -d '[:space:]' <site/CNAME)
     grep -q "redirectURI = \"https://$domain/callback/\"" \
         Sources/SlackKit/OAuth/SlackOAuth.swift ||

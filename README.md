@@ -81,11 +81,11 @@ your workspace, and paste:
 ```
 
 The manifest sets the scopes, the redirect URL, and enables PKCE (which marks the app a public
-client — one-way, and exactly what OnAir needs). It also keeps token rotation **off**, which is
-still the setting to prefer: with rotation on, every token expires after twelve hours. OnAir
-renews them for you when that happens (ADR-0020), so you authorise once either way — but a
-rotating credential dies for good if the app goes unused for thirty days, and a non-rotating one
-does not. Note that Slack does not let you turn rotation back off once it is on. After **Create**:
+client — one-way, and exactly what OnAir needs). It also *asks for* token rotation **off**, which is
+still the setting to prefer — though asking is all it does: the shared app was created from this
+manifest and rotates anyway (ADR-0020). With rotation on, every token expires after twelve hours.
+OnAir renews them for you when that happens, so you authorise once either way — but a rotating
+credential dies for good if the app goes unused for thirty days, and a non-rotating one does not. Note that Slack does not let you turn rotation back off once it is on. After **Create**:
 **Basic Information → App Credentials** → copy the **Client ID** — only the id — into Settings,
 Save, Connect.
 
@@ -98,7 +98,7 @@ install.
 | | Slack console | How often |
 |---|---|---|
 | **You (user)** | nothing — Connect and approve in the browser | authorise once per workspace |
-| **Maintainer** | create the shared app, activate distribution ([runbook](docs/runbooks/shared-app.md)) | once, ever |
+| **Maintainer** | claim the callback domain ([runbook](docs/runbooks/callback-domain.md)), then create the shared app and activate distribution ([runbook](docs/runbooks/shared-app.md)) | once, ever |
 | **Bring-your-own-app** (workspace blocks the shared one) | create one app from the manifest above | once |
 
 ## What it does
@@ -170,17 +170,23 @@ it was found by running `doctor`, not by reasoning about it.
   cost a new Slack scope and a reconnect for every user
   ([ADR-0014](docs/decisions/0014-render-shortcodes-from-a-vendored-table.md)). Slack itself still
   shows it correctly — it is only OnAir's own menu that cannot.
-- **Slack's responses are not yet verified against a live workspace** — the parser's fixtures come
-  from Slack's documentation ([GAP-0001](docs/gaps/open/0001-slack-fixtures-are-documented-not-captured.md)),
-  and the PKCE exchange plus token longevity are documented-but-unmeasured
+- **Slack's responses are only partly verified against a live workspace** — the parser's fixtures
+  are still written from Slack's documentation rather than captured
+  ([GAP-0001](docs/gaps/open/0001-slack-fixtures-are-documented-not-captured.md)), and the renewal
+  that keeps a connection alive has not been watched working against the real endpoint
   ([GAP-0002](docs/gaps/open/0002-pkce-flow-unverified-against-a-live-workspace.md)). Recorded
   rather than glossed over.
+- **Connecting needs `onair.pmbrull.me` to be up.** Slack will not register an `http://` redirect
+  URL, so the callback lands on a static page this project serves from GitHub Pages and is relayed
+  to your Mac ([ADR-0019](docs/decisions/0019-the-callback-lands-on-a-page-we-host.md)). An already
+  connected OnAir keeps working if that page ever goes away; a *new* connection cannot be made until
+  it is back.
 
 ## Development
 
 ```bash
-make verify   # references + architecture invariants + format + lint + build + test
-make test     # 115 tests in 13 suites — use this, not `swift test`
+make verify   # references + architecture invariants + version rule + format + lint + build + test
+make test     # 127 tests in 15 suites — use this, not `swift test`
 ```
 
 `swift test` will not work on a machine with only the Command Line Tools: XCTest ships with Xcode,
@@ -188,7 +194,7 @@ so the suite is written against Swift Testing and `make test` supplies the searc
 not. [`docs/dev-loop.md`](docs/dev-loop.md) has the details.
 
 The repo carries its own working agreement — [`CLAUDE.md`](CLAUDE.md),
-[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with eighteen ADRs
+[`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/`](docs/) and [`.claude/`](.claude/) — with twenty ADRs
 recording every load-bearing choice and the alternative it beat.
 
 ## TODO
@@ -206,8 +212,16 @@ recording every load-bearing choice and the alternative it beat.
 - [ ] Protect `main`. Since ADR-0018 a push there signs and notarizes code, which makes
       review-before-merge a code-signing control.
 - [x] Pick a LICENSE — MIT, chosen for the warranty and liability disclaimer.
-- [ ] Capture those responses verbatim into `SlackResponseFixtures`, and settle whether the token
-      carries an expiry (GAP-0001, GAP-0002).
+- [x] Move the callback to a page we host and drop the certificate — the redirect URL is
+      `https://onair.pmbrull.me/callback/`, the domain is claimed and serving, and the browser
+      warning is gone (ADR-0019, [runbook](docs/runbooks/callback-domain.md)).
+- [ ] Connect once end to end against a real workspace with the new redirect URL — the criterion no
+      check in this repo can fake (GAP-0002).
+- [ ] Capture those responses verbatim into `SlackResponseFixtures`, and watch one renewal work
+      against the real endpoint — the credential does expire, measured 2026-08-18, and OnAir now
+      renews it (GAP-0001, GAP-0002, ADR-0020).
+- [ ] Teach the gate to notice that the callback domain is unreachable — A7 was green throughout the
+      outage that made connecting impossible (GAP-0004).
 - [ ] Decide whether screen sharing is worth a third signal.
 - [ ] Multiple workspaces, if a second one ever gets daily use.
 - [ ] Revisit the crash net if a stranded status actually happens (ADR-0009).

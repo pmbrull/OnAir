@@ -16,9 +16,10 @@ exactly what a future reader cannot reconstruct from the code.
 
 **This repo has an unusual amount of legitimate *why*, and almost all of it was measured rather
 than reasoned.** The microphone default is off because an audio mixer holds the input open
-(ADR-0011). The OAuth listener speaks TLS because Slack rejects `http://` (ADR-0005). The SAN goes
-through a config file because the LibreSSL macOS ships did not always carry `-addext`. Both device
-monitors coalesce because CoreMediaIO fires once per device. Every one of those looks like
+(ADR-0011). The OAuth listener speaks plain HTTP because a page we host, not this machine, is
+Slack's redirect URL (ADR-0019). The relay page forwards a named set of parameters rather than the
+whole query string, because it is handing them to a listener that is about to decide whether to
+trust them. Both device monitors coalesce because CoreMediaIO fires once per device. Every one of those looks like
 over-engineering until you know the failure it prevents. **Say the failure.**
 
 The inverse is equally a finding: a workaround with no explanation is a line the next person will

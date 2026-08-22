@@ -37,8 +37,9 @@ on the app.
 |---|---|---|---|
 | `DeviceKit` | library | Whether any camera or microphone is running somewhere; the device inventory `doctor` prints; hot-plug re-attachment | Foundation, CoreMediaIO, CoreAudio |
 | `StatusKit` | library | `UserStatus`, `LiveStatus`, `StatusPolicy`, `StatusEngine`, `EmojiShortcode` — the debounce, the pause, the override verdict, the ownership test, the restore rule and the shortcode table. **Depends on nothing** | Foundation |
-| `SlackKit` | library | `SlackClient` (six calls: profile read/write, identity, three DND), `SlackWire` (decoding), and the OAuth loopback: `SlackOAuth`, `PKCE`, `LoopbackReceiver`, `LoopbackIdentity` | Foundation, Network, Security, CryptoKit, StatusKit |
+| `SlackKit` | library | `SlackClient` (six calls: profile read/write, identity, three DND), `SlackWire` (decoding), `SlackCredential` and `TokenRefresh.plan` — when a credential is renewed (ADR-0020) — and the OAuth flow: `SlackOAuth`, `PKCE`, `LoopbackReceiver` | Foundation, Network, Security, CryptoKit, StatusKit |
 | `OnAir` | executable | Menu bar, Settings, `TokenStore`, `PolicyStore`, `LaunchAtLogin`, `AppCoordinator`, `Doctor` | everything above + AppKit, SwiftUI, ServiceManagement |
+| `site/` | static pages, not a Swift target | The relay page Slack redirects to (`callback/index.html`), its landing page, and the `CNAME` that names the host. No build step and no dependencies, so what is served is what is in the repository; deployed by `.github/workflows/pages.yml` (ADR-0019) | nothing — plain HTML, CSS, JavaScript |
 
 Two files in the tree are generated, committed, and never fetched at build or run time (ADR-0004):
 `Sources/StatusKit/EmojiTable.swift`, 1913 shortcode → glyph pairs vendored from a pinned tag of
@@ -89,7 +90,10 @@ password. Measured before the fix: 268 stranded keys on one machine, most of the
 ADR-0019).
 
 **A7 — The relay page and the listener agree.** Slack's Redirect URL is a page in `site/`, served
-at the domain in `site/CNAME` (ADR-0019). The port it hands the callback back to must be
+at the domain the repository's GitHub Pages setting claims (ADR-0019). `site/CNAME` *declares* that
+domain and A7 uses it as the source of truth for the string — but on a workflow-built site GitHub
+ignores the file, so it does not claim anything
+([`docs/runbooks/callback-domain.md`](docs/runbooks/callback-domain.md) §2). The port it hands the callback back to must be
 `SlackOAuth.defaultPort`, the path must be `LoopbackReceiver.callbackPath`, and
 `SlackOAuth.redirectURI` must name that domain. Every one of those values lives in exactly two
 files, and a mismatch fails a login with an error that names neither OnAir nor the reason — a

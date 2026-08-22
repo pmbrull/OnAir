@@ -18,8 +18,9 @@ The folder **is** the status:
 > record, not a blank to fill with what seems sensible.
 
 This matters here because OnAir sits on three things nobody publishes a contract for: CoreMediaIO's
-and CoreAudio's enumeration behaviour across every virtual-device vendor, Slack's JSON, and the
-version of LibreSSL that happens to ship with a given macOS. ADR-0011 exists because one of those
+and CoreAudio's enumeration behaviour across every virtual-device vendor, Slack's JSON, and whether
+a given browser will perform the `https:` → `http://127.0.0.1` navigation the callback relay rests
+on (ADR-0019). ADR-0011 exists because one of those
 turned out not to behave the way the design assumed — and it was found by running against real
 hardware, not by reasoning.
 
@@ -29,6 +30,7 @@ hardware, not by reasoning.
 | --- | --- |
 | [0001](open/0001-slack-fixtures-are-documented-not-captured.md) | The Slack response fixtures are documentation-derived, never captured |
 | [0002](open/0002-pkce-flow-unverified-against-a-live-workspace.md) | The PKCE flow and its token longevity are unverified against a live workspace |
+| [0004](open/0004-a7-cannot-see-what-pages-actually-serves.md) | A7 compares two files in this repository and cannot see what Pages actually serves |
 
 ## Closed
 

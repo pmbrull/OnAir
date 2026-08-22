@@ -1,14 +1,16 @@
 # Runbook — first run
 
 Getting from an install — brew or a fresh clone — to a status that changes itself. This is the
-**user** runbook; the maintainer's counterparts are [`shared-app.md`](shared-app.md) (the Slack
-app, once ever) and [`release.md`](release.md) (each release).
+**user** runbook; the maintainer's counterparts are
+[`callback-domain.md`](callback-domain.md) (the DNS record and the Pages setting the redirect URL
+depends on — §0–§2 before anything else), [`shared-app.md`](shared-app.md) (the Slack app, once
+ever) and [`release.md`](release.md) (each release).
 
 Who does what, and how often:
 
 | Role | Slack console work | How often |
 |---|---|---|
-| Maintainer | create the shared app from the manifest, activate distribution | **once, ever** ([`shared-app.md`](shared-app.md)) |
+| Maintainer | claim the callback domain *first*, then create the shared app from the manifest and activate distribution | **once, ever** ([`callback-domain.md`](callback-domain.md), then [`shared-app.md`](shared-app.md)) |
 | User (shared app baked in) | none — press Connect, approve in the browser | authorise once per workspace |
 | User bringing their own app (§2b) | create one app from the manifest | once, then as above |
 
@@ -19,7 +21,7 @@ app; that flow sends no user scopes and fails with "No scopes requested" (see
 
 ## 1. Install
 
-Homebrew, once v0.1.0 is published (the README's TODO tracks it — until then, source):
+Homebrew — v0.1.0 shipped 2026-08-14 and the cask is live:
 
 ```bash
 brew install --cask pmbrull/tap/onair
@@ -40,10 +42,12 @@ intentional.
 
 Settings › Slack (⌘, from the menu panel) → **Connect to Slack**.
 
-Your browser opens Slack's authorise page. Approve it. The browser then warns **"Your connection is
-not private"** — that is OnAir's own certificate for `localhost`, which exists because Slack
-refuses plain-HTTP redirect URLs (ADR-0005). Click **Advanced → Proceed to localhost** once. You
-should land on **"OnAir is connected"**; the menu panel now shows your name and workspace.
+Your browser opens Slack's authorise page. Approve it. Slack sends you to
+`https://onair.pmbrull.me/callback/` — a page served from this repository — which hands the
+authorisation straight back to OnAir on this Mac. There is nothing to click through: the browser
+warning that used to appear here was OnAir's own certificate for `localhost`, and ADR-0019 removed
+the certificate along with the reason for it. You should land on **"OnAir is connected"**; the menu
+panel now shows your name and workspace.
 
 There is nothing to paste and no secret anywhere: OnAir is a public client and proves each
 connection with PKCE (ADR-0012).
@@ -65,10 +69,12 @@ redirect URL
 (`https://onair.pmbrull.me/callback/` — a static page in this repository that hands the callback
 back to OnAir on your Mac; Slack rejects `http://`, which is why it cannot simply be the loopback,
 ADR-0019), PKCE on
-(public client, one-way — no secret is ever used), and **token rotation off** — rotation expires
-every token after twelve hours. OnAir renews a rotating credential itself (ADR-0020), so either
-setting works; rotation off is still preferable, because a rotating credential is dead for good
-after thirty days unused, and Slack will not let you turn rotation back off once it is on.
+(public client, one-way — no secret is ever used), and it *asks for* **token rotation off**. Treat
+that as a request rather than a result: the shared app was created from this same manifest and
+rotates anyway (ADR-0020, measured 2026-08-18), which expires every token after twelve hours. OnAir
+renews a rotating credential itself, so either way you authorise once; rotation off is still
+preferable, because a rotating credential is dead for good after thirty days unused, and Slack will
+not let you turn rotation back off once it is on.
 
 Then: **Basic Information** → **App Credentials** → copy the **Client ID** — only the id — into
 Settings, press Save, and Connect as above.
@@ -93,7 +99,9 @@ anything itself; it says so when the app would.
 
 That row is what GAP-0002 now turns on. `scheduled for …` means Slack issued a rotating credential
 and OnAir will keep it alive; `not needed — Slack issued no expiry` means this app's tokens do not
-rotate. The gap closes when a credential has outlived its own expiry with nobody touching it.
+rotate; `unknown — stored before OnAir could renew; reconnect to find out` is what an upgrade from
+v0.3 shows until you reconnect once, because the stored credential predates the fields the plan
+reads. The gap closes when a credential has outlived its own expiry with nobody touching it.
 
 ## 4. Try it
 
@@ -110,7 +118,8 @@ your status is **cleared** instead of revived, and the menu's last line says so 
 | "Port 51234 is already in use" | Something else holds the port. `lsof -iTCP:51234 -sTCP:LISTEN`. |
 | "Invalid permissions requested — No scopes requested" in Slack's dashboard | You pressed the dashboard's Install button, which cannot drive a PKCE user-scope app. Skip it: pressing Connect in OnAir is the install. |
 | Exchange fails with a Slack error right after authorising | If using your own app: it was created without the manifest and PKCE is off, or the scopes are under **Bot** instead of **User** Token Scopes. See also GAP-0002. |
-| Browser says "redirect_uri did not match" | The Redirect URL is not saved, or differs by a character. |
+| Browser says "redirect_uri did not match" | The Redirect URL is not saved on the Slack app, or differs by a character — the trailing slash counts. Maintainers: [`callback-domain.md`](callback-domain.md). |
+| The browser stops on `onair.pmbrull.me` and OnAir never notices | The page could not reach the listener. `make doctor` names the port it expects; `lsof -iTCP:51234 -sTCP:LISTEN` says who holds it. |
 | Connected, camera on, nothing happens | The menu's last line says why. Most often: you already had a status set and **Replace a status I set myself** is off (ADR-0008). |
 | Launch at login does nothing | `SMAppService` needs a signed bundle. `make app` says whether it signed or fell back to ad-hoc. |
 | Status stuck on after a crash | Known and accepted — OnAir gives its own status no server-side expiry (ADR-0009). Clear it in Slack. |

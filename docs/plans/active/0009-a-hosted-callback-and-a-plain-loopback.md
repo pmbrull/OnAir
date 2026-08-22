@@ -22,30 +22,34 @@ drift into a version where the page hands back to a door the app is not standing
 
 ## Acceptance criteria
 
-- [ ] `make verify` is green.
-- [ ] `scripts/check-architecture.sh` fails a tree in which `SecPKCS12Import` appears anywhere.
+- [x] `make verify` is green.
+- [x] `scripts/check-architecture.sh` fails a tree in which `SecPKCS12Import` appears anywhere.
       A6 is restated, not dropped: OnAir imports no PKCS#12 archive at all, which is strictly
       stronger than the old "must pass `kSecImportToMemoryOnly`".
-- [ ] `LoopbackIdentity.swift` and its tests are gone, and nothing in `Sources/` or `Tests/`
+- [x] `LoopbackIdentity.swift` and its tests are gone, and nothing in `Sources/` or `Tests/`
       mentions it.
-- [ ] `LoopbackTests` drives the plain-HTTP listener with `URLSession` and still covers: the happy
+- [x] `LoopbackTests` drives the plain-HTTP listener with `URLSession` and still covers: the happy
       path, `?error=`, a mismatched `state`, a non-callback path, and a malformed request.
 - [x] The relay is measured, not reasoned about: a browser loaded with a callback URL reaches a
       listener on the loopback port with `code` and `state` intact, for the default port and for a
       port carried in `state`.
 - [x] And measured **from an HTTPS origin**, in Chromium, WebKit and Firefox — the first pass served
       the page over `http://`, which did not exercise the one property the design rests on.
-- [ ] `https://onair.pmbrull.me/callback/` serves the relay over a valid certificate, and
-      `https://onair.pmbrull.me/` serves a landing page.
+- [x] `https://onair.pmbrull.me/callback/` serves the relay over a valid certificate, and
+      `https://onair.pmbrull.me/` serves a landing page. Measured 2026-08-22: both answer `200`,
+      the certificate is Let's Encrypt `CN=onair.pmbrull.me`, and `pmbrull.github.io/OnAir/callback/`
+      now `301`s to it. The two steps this needed were the human ones — the DNS record and the
+      repository's custom-domain setting, neither of which `site/CNAME` performs on a
+      workflow-built site. [`docs/runbooks/callback-domain.md`](../../runbooks/callback-domain.md).
 - [ ] One live **Connect to Slack** completes end to end with no certificate warning, against a
       real workspace. This is the criterion that cannot be faked and it is measured by a human.
-- [ ] `make doctor` prints the hosted redirect URL.
+- [x] `make doctor` prints the hosted redirect URL.
 
 ## Affected modules
 
 | Target | Change | Invariants |
 |---|---|---|
-| `SlackKit` | `SlackOAuth.redirectURI()` returns the hosted URL; `LoopbackReceiver` drops TLS; `LoopbackIdentity` deleted | **A6** restated; A1/A2 untouched — still no AppKit, still no reverse dependency |
+| `SlackKit` | `SlackOAuth.redirectURI` returns the hosted URL; `LoopbackReceiver` drops TLS; `LoopbackIdentity` deleted | **A6** restated; A1/A2 untouched — still no AppKit, still no reverse dependency |
 | `OnAir` (app) | `AppCoordinator` loses the `LoopbackIdentity.Failure` catch; Settings copy about the warning is now false | A3 — no decision moves into the app |
 | `site/` (new) | Static relay + landing page, deployed by `.github/workflows/pages.yml` | none — not a Swift target |
 | `scripts/check-architecture.sh` | A6 restated | — |
@@ -64,7 +68,7 @@ itself is worth keeping; the deploy workflow uploads a directory.
    repository and set the custom domain.
 3. **DNS.** `onair` CNAME → `pmbrull.github.io` at Porkbun. Not something this repository can do;
    it is a step for the human, and until it lands the page answers on `pmbrull.github.io/OnAir`.
-4. **`SlackOAuth.redirectURI()`** returns `https://onair.pmbrull.me/callback/`. The same string
+4. **`SlackOAuth.redirectURI`** returns `https://onair.pmbrull.me/callback/`. The same string
    goes to the authorize URL and the token exchange — Slack compares them.
 5. **`LoopbackReceiver` drops TLS.** `NWListener` with plain `NWParameters.tcp`, no identity
    argument, and the `identityUnusable` failure case goes with it.
@@ -137,3 +141,12 @@ itself is worth keeping; the deploy workflow uploads a directory.
   was not optional: it said the authorisation code *never leaves your machine*. It now does. The
   paragraph says what passes through the page, what the page cannot do with it, and that the token
   is never on that side of the wire at all.
+- 2026-08-22 — **The domain was the last mile, and `site/CNAME` does not walk it.** The first real
+  connect failed at Slack's authorise page — `redirect_uri did not match any configured URIs` — and
+  behind that sat two steps no workflow here can take: no DNS record for `onair.pmbrull.me` at all,
+  and no custom domain claimed on the repository. Pages is workflow-built, so GitHub ignores the
+  CNAME file in the artefact: it declares the host and A7 checks the declaration, but the repository
+  setting is what serves. Written up as
+  [`docs/runbooks/callback-domain.md`](../../runbooks/callback-domain.md) rather than left in a
+  commit message, because it is due again the day the domain moves — and the gate was green the
+  whole time, which is [GAP-0004](../../gaps/open/0004-a7-cannot-see-what-pages-actually-serves.md).

@@ -17,7 +17,8 @@ SAME reason, stop and use `harness-gap` instead of hand-fixing.
 | sub-step | pass criterion |
 |---|---|
 | references | every ADR/GAP reference resolves; records indexed; gap status matches its folder |
-| arch | invariants A1 (deps), A2 (headless kits), A4 (token in Keychain), A5 (no capture) hold |
+| arch | invariants A1 (deps), A2 (headless kits), A4 (token in Keychain), A5 (no capture), A6 (no PKCS#12 import), A7 (relay page and listener agree) hold |
+| version-rule | `scripts/next-version.sh` answers all 37 cases in the table (ADR-0018) |
 | fmt-check | no unformatted Swift (**skips if swiftformat is absent** — install it, or CI will find what you did not) |
 | lint | no SwiftLint issue (same caveat) |
 | build | every target compiles, kits under Swift 6 language mode |
@@ -66,7 +67,7 @@ each the actual diff, then address or consciously dismiss every finding:
 |---|---|
 | `code-reviewer` | correctness — logic, edge cases, error handling, concurrency, test adequacy |
 | `security-reviewer` | what leaves the machine, what is stored, what is executed |
-| `architecture-reviewer` | invariants A1–A5, and A3 in particular, which no grep can decide |
+| `architecture-reviewer` | invariants A1–A7, and A3 in particular, which no grep can decide |
 | `convention-reviewer` | every rule in `.claude/rules/` |
 | `doc-gardener` | which docs the diff makes stale (proposes edits) |
 

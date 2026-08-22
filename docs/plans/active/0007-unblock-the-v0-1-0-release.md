@@ -2,7 +2,7 @@
 
 - Status: Active
 - Date: 2026-08-14
-- Input: [ADR-0017](../../decisions/0017-release-through-a-personal-homebrew-tap.md),
+- Input: [ADR-0017](../../decisions/0017-distribute-through-a-personal-tap.md),
   [runbook `release.md`](../../runbooks/release.md) §4–§5, and the red gate measured below.
 
 ## Goal
