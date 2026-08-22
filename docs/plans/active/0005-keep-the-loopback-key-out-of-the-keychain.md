@@ -168,5 +168,5 @@ budget of up to one prompt per key was wrong, and the Keychain Access fallback i
 
 `2026-08-14` — One verify run added 7 keys *after* the fix and never did so again — nine clean runs
 either side, stable at rest, forced rebuilds clean. Recorded as
-[GAP-0003](../../gaps/open/0003-one-unexplained-keychain-deposit-after-the-fix.md) rather than
+[GAP-0003](../../gaps/closed/0003-one-unexplained-keychain-deposit-after-the-fix.md) rather than
 explained away: a transitional build state fits the number, and "fits" is not "measured".

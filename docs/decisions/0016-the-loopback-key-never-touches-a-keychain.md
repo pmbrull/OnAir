@@ -79,7 +79,7 @@ subsequent runs â€” three `make verify`, four `make test`, two forced rebuilds â
 certificate counts did not move, and they are stable at rest.
 
 **One run in the middle of that sweep moved the count by 7 and has never reproduced.**
-[GAP-0003](../gaps/open/0003-one-unexplained-keychain-deposit-after-the-fix.md) carries it. A
+[GAP-0003](../gaps/closed/0003-one-unexplained-keychain-deposit-after-the-fix.md) carries it. A
 transitional build state is the story that fits, and it is a story rather than a measurement, which
 is why it is a gap and not a paragraph in this Context.
 

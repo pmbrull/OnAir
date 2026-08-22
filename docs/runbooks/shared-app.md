@@ -4,10 +4,12 @@ The developer-side half of ADR-0012. Done **once for the lifetime of the project
 release, not per user, not per machine. When it is done, every user's setup is Install → Connect →
 Authorize, and Settings has no fields.
 
-**Do [`callback-domain.md`](callback-domain.md) first.** The redirect URL registered below is a page
-on the public internet, and it does not exist until a DNS record and a repository setting say so —
-neither of which any workflow here can make. An app registered against a URL that does not yet
-resolve authorises fine and then strands the browser on a dead domain.
+**Do [`callback-domain.md`](callback-domain.md) §0–§2 first.** The redirect URL registered below is
+a page on the public internet, and it does not exist until a DNS record and a repository setting say
+so — neither of which any workflow here can make. An app registered against a URL that does not yet
+resolve authorises fine and then strands the browser on a dead domain, and a host that resolves to
+Pages while no repository claims it can be claimed by anyone (that runbook's §0). Its §3 — the
+Redirect URL itself — needs the app §1 below creates, so it lands after this page.
 
 ## 1. Create the app from the manifest
 
@@ -78,9 +80,10 @@ Then `make verify`, and check Settings › Slack shows **no** Client ID field an
    and the ADR's untested assumption — the renewal response's shape for a *user* token — is the
    first place to look.
 
-If the app turns out to issue rotating tokens, check **OAuth & Permissions → Token Rotation** in
-the dashboard. It cannot be turned off once on, so the only way back to non-rotating credentials is
-a new app and a new `builtInClientID` — worth doing, but it is not urgent while renewal works.
+This app **does** issue rotating tokens — measured 2026-08-18, against a manifest that asked for
+rotation off (ADR-0020). **OAuth & Permissions → Token Rotation** in the dashboard is where to
+confirm why. It cannot be turned off once on, so the only way back to non-rotating credentials is a
+new app and a new `builtInClientID` — worth doing, but it is not urgent while renewal works.
 
 ## Lifecycle afterwards
 

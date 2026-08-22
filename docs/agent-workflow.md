@@ -35,7 +35,7 @@ than `git tag`.
    - `code-reviewer` — is it *correct*: logic, edge cases, concurrency, resource lifecycle, tests.
    - `security-reviewer` — is it *safe*: what leaves the machine, what is stored, what is executed.
    - `convention-reviewer` — diff vs [`../.claude/rules/`](../.claude/rules/).
-   - `architecture-reviewer` — diff vs [`../ARCHITECTURE.md`](../ARCHITECTURE.md) invariants A1–A5.
+   - `architecture-reviewer` — diff vs [`../ARCHITECTURE.md`](../ARCHITECTURE.md) invariants A1–A7.
    - `doc-gardener` — which docs went stale; apply its proposed edits.
 5. **Merge** — `open-pr`. **An agent opens the PR; a human merges.** On merge the plan moves to
    `docs/plans/completed/`.
@@ -62,15 +62,17 @@ substance dimensions `make verify` does not cover.
 ## What this repo verifies that a unit test cannot
 
 OnAir's claims are about **other people's undocumented behaviour on this machine**: CoreMediaIO's
-and CoreAudio's device enumeration across every virtual-device vendor, Slack's JSON, and whichever
-LibreSSL macOS shipped this year. A fixture that restates our assumptions proves nothing about any
-of them.
+and CoreAudio's device enumeration across every virtual-device vendor, Slack's JSON, and whether a
+browser will make the `https:` → `http://127.0.0.1` hop the callback relay rests on. A fixture that
+restates our assumptions proves nothing about any of them.
 
 So `Tests/DeviceKitTests/DeviceJourneyTests.swift` runs against **this Mac's real hardware** and
 disables itself when there is none, asserting **per device** and naming the ones that fail — an
 aggregate count would go green while a whole class of device silently failed to parse. And
-`LoopbackTests` mints a real certificate and drives a real TLS listener with `URLSession`, because
-a certificate the TLS stack rejects is not a failure a string can reproduce.
+`LoopbackTests` binds a real listener and drives it with `URLSession`, because a port that will not
+bind and a request split across TCP segments are not failures a string can reproduce. The relay page
+in `site/` is the one thing no Swift test reaches — it runs in a browser, so it was measured with
+one, in three engines, over real TLS (ADR-0019).
 
 ADR-0011 is what this bar bought: the microphone default was wrong, and only real hardware said so.
 

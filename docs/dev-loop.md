@@ -5,7 +5,7 @@ How to build, run and exercise OnAir, and what a healthy result looks like.
 ## Commands
 
 ```bash
-make verify         # the gate: references + arch + fmt-check + lint + build + test
+make verify         # the gate: references + arch + version-rule + fmt-check + lint + build + test
 make doctor         # everything the app does, minus the window — against this Mac's real hardware
 make doctor-slack   # as doctor, plus one read-only Slack round trip
 make test           # the suite
@@ -112,10 +112,11 @@ Then, in order:
    "Set up Slack"; with one, "Not connected".
 2. Settings › Slack: if a Client ID field is shown, paste your Slack app's id — there is no
    secret; PKCE replaces it (ADR-0012) — and press Save. The runbook's §2b covers creating the app.
-3. Press **Connect to Slack**. Your browser opens Slack's authorise page. Approve it, then click
-   through the "connection is not private" warning — that is OnAir's own certificate for
-   `localhost`, and ADR-0005 explains why it has to exist. The tab should end on "OnAir is
-   connected".
+3. Press **Connect to Slack**. Your browser opens Slack's authorise page. Approve it. Slack sends
+   the browser to `https://onair.pmbrull.me/callback/` — the page in `site/` — which hands `code`
+   and `state` straight back to the listener on this Mac. There is nothing to click through: the
+   warning that used to be here went with the certificate (ADR-0019). The tab should end on "OnAir
+   is connected".
 4. Open Photo Booth. Within a few seconds the menu-bar glyph becomes a filled record dot and the
    panel's last line says "Set your status to 🎥 On camera." — the glyph, not `:movie_camera:`
    (ADR-0014).

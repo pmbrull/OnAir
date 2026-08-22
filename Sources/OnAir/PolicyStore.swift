@@ -24,8 +24,10 @@ enum PolicyStore {
         UserDefaults.standard.set(data, forKey: key)
     }
 
-    /// Where the loopback certificate lives. Not in the bundle — a key shipped inside an app is a
-    /// key every copy of that app shares (ADR-0005).
+    /// OnAir's application-support directory. It held the loopback certificate until ADR-0019
+    /// deleted it, and nothing writes here now — `make uninstall` still removes the directory
+    /// because a machine that connected before the callback moved has a `loopback.p12` sitting in
+    /// it.
     static var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? URL(fileURLWithPath: NSHomeDirectory())

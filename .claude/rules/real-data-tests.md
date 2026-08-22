@@ -22,8 +22,8 @@ touches reality:
   engine refusing the `https:` → `http://127.0.0.1` hop — is precisely one that only a browser can
   have. Invariant A7 checks that its constants match the app's; it cannot check that it works.
 
-**Why.** The risk these modules carry is that CoreMediaIO, CoreAudio, Slack, or LibreSSL is *not
-what we think it is*. A hand-written fixture encodes our belief and then confirms it — it proves
+**Why.** The risk these modules carry is that CoreMediaIO, CoreAudio, Slack, or a browser engine is
+*not what we think it is*. A hand-written fixture encodes our belief and then confirms it — it proves
 the parser matches the fixture, which is the one thing never in doubt.
 
 **This is not theoretical here.** `watchMicrophone` was going to ship `true`. Every unit test

@@ -5,17 +5,20 @@ newer and wins — then update this.
 
 ## Shape
 
-A single-user macOS desktop utility. No server, no accounts, no multi-tenancy. The only remote
-traffic is six Slack Web API calls on the user's own behalf.
+A single-user macOS desktop utility. No server, no accounts, no multi-tenancy. The remote traffic
+is Slack's Web API on the user's own behalf — six calls, plus the OAuth exchange and its renewal
+(ADR-0020). One static page is hosted, at `onair.pmbrull.me`: it is Slack's redirect URL, runs no
+server-side code and stores nothing (ADR-0019).
 
 ## Stack
 
 - **Swift 6 / SwiftPM**, no external dependencies (ADR-0004).
 - **AppKit + SwiftUI**, menu-bar only (`LSUIElement`).
 - **CoreMediaIO + CoreAudio** property listeners for device activity (ADR-0003).
-- **Network.framework** for the TLS loopback that catches Slack's OAuth redirect (ADR-0005).
-- **Security** for the Keychain, PKCS#12 import and the PKCE verifier's randomness; **CryptoKit**
-  for its S256 challenge (ADR-0012); **ServiceManagement** for the login item.
+- **Network.framework** for the plain-HTTP loopback that catches the callback the hosted relay
+  page hands back (ADR-0019).
+- **Security** for the Keychain and for the randomness behind the PKCE verifier and `state`;
+  **CryptoKit** for the S256 challenge (ADR-0012); **ServiceManagement** for the login item.
 
 ## Team
 

@@ -1,14 +1,16 @@
 # Runbook — first run
 
 Getting from an install — brew or a fresh clone — to a status that changes itself. This is the
-**user** runbook; the maintainer's counterparts are [`shared-app.md`](shared-app.md) (the Slack
-app, once ever) and [`release.md`](release.md) (each release).
+**user** runbook; the maintainer's counterparts are
+[`callback-domain.md`](callback-domain.md) (the DNS record and the Pages setting the redirect URL
+depends on — §0–§2 before anything else), [`shared-app.md`](shared-app.md) (the Slack app, once
+ever) and [`release.md`](release.md) (each release).
 
 Who does what, and how often:
 
 | Role | Slack console work | How often |
 |---|---|---|
-| Maintainer | create the shared app from the manifest, activate distribution | **once, ever** ([`shared-app.md`](shared-app.md)) |
+| Maintainer | claim the callback domain *first*, then create the shared app from the manifest and activate distribution | **once, ever** ([`callback-domain.md`](callback-domain.md), then [`shared-app.md`](shared-app.md)) |
 | User (shared app baked in) | none — press Connect, approve in the browser | authorise once per workspace |
 | User bringing their own app (§2b) | create one app from the manifest | once, then as above |
 
@@ -19,7 +21,7 @@ app; that flow sends no user scopes and fails with "No scopes requested" (see
 
 ## 1. Install
 
-Homebrew, once v0.1.0 is published (the README's TODO tracks it — until then, source):
+Homebrew — v0.1.0 shipped 2026-08-14 and the cask is live:
 
 ```bash
 brew install --cask pmbrull/tap/onair
@@ -67,10 +69,12 @@ redirect URL
 (`https://onair.pmbrull.me/callback/` — a static page in this repository that hands the callback
 back to OnAir on your Mac; Slack rejects `http://`, which is why it cannot simply be the loopback,
 ADR-0019), PKCE on
-(public client, one-way — no secret is ever used), and **token rotation off** — rotation expires
-every token after twelve hours. OnAir renews a rotating credential itself (ADR-0020), so either
-setting works; rotation off is still preferable, because a rotating credential is dead for good
-after thirty days unused, and Slack will not let you turn rotation back off once it is on.
+(public client, one-way — no secret is ever used), and it *asks for* **token rotation off**. Treat
+that as a request rather than a result: the shared app was created from this same manifest and
+rotates anyway (ADR-0020, measured 2026-08-18), which expires every token after twelve hours. OnAir
+renews a rotating credential itself, so either way you authorise once; rotation off is still
+preferable, because a rotating credential is dead for good after thirty days unused, and Slack will
+not let you turn rotation back off once it is on.
 
 Then: **Basic Information** → **App Credentials** → copy the **Client ID** — only the id — into
 Settings, press Save, and Connect as above.
@@ -95,7 +99,9 @@ anything itself; it says so when the app would.
 
 That row is what GAP-0002 now turns on. `scheduled for …` means Slack issued a rotating credential
 and OnAir will keep it alive; `not needed — Slack issued no expiry` means this app's tokens do not
-rotate. The gap closes when a credential has outlived its own expiry with nobody touching it.
+rotate; `unknown — stored before OnAir could renew; reconnect to find out` is what an upgrade from
+v0.3 shows until you reconnect once, because the stored credential predates the fields the plan
+reads. The gap closes when a credential has outlived its own expiry with nobody touching it.
 
 ## 4. Try it
 

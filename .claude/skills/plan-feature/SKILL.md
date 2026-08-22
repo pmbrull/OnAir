@@ -28,7 +28,7 @@ real hardware or a case in `DeviceJourneyTests` — a fake restates our assumpti
 testing them. If it touches `Sources/SlackKit/` parsing, one MUST be captured Slack output.
 
 ## Affected modules
-Which targets change, and which ARCHITECTURE invariants (A1–A5) they touch.
+Which targets change, and which ARCHITECTURE invariants (A1–A7) they touch.
 
 ## Steps
 Ordered; each independently verifiable.

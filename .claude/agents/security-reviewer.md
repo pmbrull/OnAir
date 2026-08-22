@@ -24,8 +24,8 @@ Review accordingly.
    permissionless app into one that must ask, and breaks its central claim (A5, ADR-0001).
 4. **Anything sent off-machine other than the Slack calls themselves.** No telemetry, no analytics,
    no crash reporting.
-5. **Shell string interpolation for a subprocess.** `LoopbackIdentity` uses an argument array; keep
-   it that way.
+5. **Shell string interpolation for a subprocess.** Nothing in `Sources/` spawns one at all since
+   ADR-0019 deleted the `openssl` call. A diff that adds one passes an argument array.
 6. **A configurable API host.** `SlackClient.baseURL` is injectable for tests only. Exposing it in
    Settings would be an exfiltration switch on an app holding a live token.
 
@@ -45,10 +45,12 @@ Review accordingly.
 - **`state` and PKCE verifier entropy.** Both come from `SecRandomCopyBytes`, and both refuse to
   continue on CSPRNG failure. A fallback to `Int.random` would look protected while not being —
   and a guessable verifier re-opens the intercepted-code attack PKCE exists to close (ADR-0012).
-- **Scope creep.** `users.profile:read` + `users.profile:write`. A new scope is a new capability on
-  the user's account and needs an ADR, not a line in a diff.
-- **The loopback key.** It is on disk at 0600 with a constant passphrase, deliberately. If a diff
-  starts using that key or that passphrase for anything else, that reasoning no longer holds.
+- **Scope creep.** `users.profile:read`, `users.profile:write`, `dnd:read`, `dnd:write` (ADR-0013).
+  A new scope is a new capability on the user's account and needs an ADR, not a line in a diff.
+- **The callback contract.** `SlackOAuth.redirectURI`, `site/CNAME`, and the relay page's
+  `DEFAULT_PORT` and `CALLBACK_PATH` are one contract, checked by A7. A diff that points the
+  redirect URL at a host this project does not control is an authorisation code sent somewhere
+  else — see `docs/runbooks/callback-domain.md`.
 - **Fixtures.** A real token in a test file is a token in git history forever.
 
 ## Output
