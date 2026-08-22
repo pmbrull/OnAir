@@ -35,8 +35,12 @@ drift into a version where the page hands back to a door the app is not standing
       port carried in `state`.
 - [x] And measured **from an HTTPS origin**, in Chromium, WebKit and Firefox — the first pass served
       the page over `http://`, which did not exercise the one property the design rests on.
-- [ ] `https://onair.pmbrull.me/callback/` serves the relay over a valid certificate, and
-      `https://onair.pmbrull.me/` serves a landing page.
+- [x] `https://onair.pmbrull.me/callback/` serves the relay over a valid certificate, and
+      `https://onair.pmbrull.me/` serves a landing page. Measured 2026-08-22: both answer `200`,
+      the certificate is Let's Encrypt `CN=onair.pmbrull.me`, and `pmbrull.github.io/OnAir/callback/`
+      now `301`s to it. The two steps this needed were the human ones — the DNS record and the
+      repository's custom-domain setting, neither of which `site/CNAME` performs on a
+      workflow-built site. [`docs/runbooks/callback-domain.md`](../../runbooks/callback-domain.md).
 - [ ] One live **Connect to Slack** completes end to end with no certificate warning, against a
       real workspace. This is the criterion that cannot be faked and it is measured by a human.
 - [ ] `make doctor` prints the hosted redirect URL.

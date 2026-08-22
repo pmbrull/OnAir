@@ -4,6 +4,11 @@ The developer-side half of ADR-0012. Done **once for the lifetime of the project
 release, not per user, not per machine. When it is done, every user's setup is Install → Connect →
 Authorize, and Settings has no fields.
 
+**Do [`callback-domain.md`](callback-domain.md) first.** The redirect URL registered below is a page
+on the public internet, and it does not exist until a DNS record and a repository setting say so —
+neither of which any workflow here can make. An app registered against a URL that does not yet
+resolve authorises fine and then strands the browser on a dead domain.
+
 ## 1. Create the app from the manifest
 
 [This link](https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22OnAir%22%2C%22description%22%3A%22Sets%20your%20Slack%20status%20when%20your%20camera%20turns%20on.%22%2C%22background_color%22%3A%22%23a01d21%22%7D%2C%22oauth_config%22%3A%7B%22redirect_urls%22%3A%5B%22https%3A%2F%2Fonair.pmbrull.me%2Fcallback%2F%22%5D%2C%22scopes%22%3A%7B%22user%22%3A%5B%22users.profile%3Aread%22%2C%22users.profile%3Awrite%22%2C%22dnd%3Aread%22%2C%22dnd%3Awrite%22%5D%7D%2C%22pkce_enabled%22%3Atrue%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D)
@@ -83,5 +88,5 @@ a new app and a new `builtInClientID` — worth doing, but it is not urgent whil
 |---|---|
 | New OnAir release | none — the app registration does not change per version |
 | New user, any workspace | none here — they press Connect (admin-approval workspaces may gate it) |
-| Redirect URL or scopes change | edit the app's manifest in the dashboard (App Manifest page — paste the README's current one); a scope change forces every user to reconnect. Done once already: ADR-0013 added the `dnd` scopes |
+| Redirect URL or scopes change | edit the app's manifest in the dashboard (App Manifest page — paste the README's current one); a scope change forces every user to reconnect. Done twice already: ADR-0013 added the `dnd` scopes, ADR-0019 moved the redirect URL off `localhost` — and an app created before that keeps the old URLs until someone edits it, which reads as `redirect_uri did not match any configured URIs` |
 | App deleted by accident | recreate from the manifest (steps 1–4); every user reconnects; the id changes |

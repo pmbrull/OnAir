@@ -10,7 +10,7 @@ The knowledge base. What each thing is, and when to reach for it.
 | [`decisions/`](decisions/) | ADRs — every load-bearing choice, with the live reasoning and the alternative it beat. |
 | [`gaps/`](gaps/) | Questions nothing answers yet, and the escape-hatch rule: record, don't guess. |
 | [`plans/`](plans/) | Units of work proposed before they're built; `active/` vs `completed/`. |
-| [`runbooks/`](runbooks/) | Manual procedures. [`first-run.md`](runbooks/first-run.md): the user side — connect, get past the certificate warning. [`shared-app.md`](runbooks/shared-app.md): the maintainer side — create the shared Slack app, once ever. [`release.md`](runbooks/release.md): the release lane — one-time certificate, notary key and repository secrets, then "merge a PR" (ADR-0018), plus the manual lane for when CI cannot. |
+| [`runbooks/`](runbooks/) | Manual procedures. [`first-run.md`](runbooks/first-run.md): the user side — install and connect. [`shared-app.md`](runbooks/shared-app.md): the maintainer side — create the shared Slack app, once ever. [`callback-domain.md`](runbooks/callback-domain.md): the other maintainer side — the DNS record and the repository setting the redirect URL depends on (ADR-0019). [`release.md`](runbooks/release.md): the release lane — one-time certificate, notary key and repository secrets, then "merge a PR" (ADR-0018), plus the manual lane for when CI cannot. |
 
 Structural intent (module boundaries, dependency directions, invariants) lives one level up in
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md); the daily table of contents is

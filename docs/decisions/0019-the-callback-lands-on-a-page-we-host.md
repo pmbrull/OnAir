@@ -75,6 +75,12 @@ fails. Before this, connecting depended on nothing but the machine it ran on. Th
 one external dependency on a path taken once per user, against a warning on that same path every
 time.
 
+That cost was paid on 2026-08-22, and it came due before anyone had connected once: the domain and
+the Slack app both still had to be told about the move, and neither is something this repository can
+do. [`docs/runbooks/callback-domain.md`](../runbooks/callback-domain.md) is that procedure — the DNS
+record, the repository's custom-domain setting (which `site/CNAME` does *not* perform on a
+workflow-built Pages site) and the Slack registration, in the order that makes each failure legible.
+
 **A third, smaller one: the page and the app must stay in step.** A page that hands back to the
 wrong port fails a login with an error that names neither. Hence A7, and hence the page shipping
 from this repository rather than beside the blog.

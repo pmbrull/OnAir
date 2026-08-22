@@ -40,10 +40,12 @@ intentional.
 
 Settings › Slack (⌘, from the menu panel) → **Connect to Slack**.
 
-Your browser opens Slack's authorise page. Approve it. The browser then warns **"Your connection is
-not private"** — that is OnAir's own certificate for `localhost`, which exists because Slack
-refuses plain-HTTP redirect URLs (ADR-0005). Click **Advanced → Proceed to localhost** once. You
-should land on **"OnAir is connected"**; the menu panel now shows your name and workspace.
+Your browser opens Slack's authorise page. Approve it. Slack sends you to
+`https://onair.pmbrull.me/callback/` — a page served from this repository — which hands the
+authorisation straight back to OnAir on this Mac. There is nothing to click through: the browser
+warning that used to appear here was OnAir's own certificate for `localhost`, and ADR-0019 removed
+the certificate along with the reason for it. You should land on **"OnAir is connected"**; the menu
+panel now shows your name and workspace.
 
 There is nothing to paste and no secret anywhere: OnAir is a public client and proves each
 connection with PKCE (ADR-0012).
@@ -110,7 +112,8 @@ your status is **cleared** instead of revived, and the menu's last line says so 
 | "Port 51234 is already in use" | Something else holds the port. `lsof -iTCP:51234 -sTCP:LISTEN`. |
 | "Invalid permissions requested — No scopes requested" in Slack's dashboard | You pressed the dashboard's Install button, which cannot drive a PKCE user-scope app. Skip it: pressing Connect in OnAir is the install. |
 | Exchange fails with a Slack error right after authorising | If using your own app: it was created without the manifest and PKCE is off, or the scopes are under **Bot** instead of **User** Token Scopes. See also GAP-0002. |
-| Browser says "redirect_uri did not match" | The Redirect URL is not saved, or differs by a character. |
+| Browser says "redirect_uri did not match" | The Redirect URL is not saved on the Slack app, or differs by a character — the trailing slash counts. Maintainers: [`callback-domain.md`](callback-domain.md). |
+| The browser stops on `onair.pmbrull.me` and OnAir never notices | The page could not reach the listener. `make doctor` names the port it expects; `lsof -iTCP:51234 -sTCP:LISTEN` says who holds it. |
 | Connected, camera on, nothing happens | The menu's last line says why. Most often: you already had a status set and **Replace a status I set myself** is off (ADR-0008). |
 | Launch at login does nothing | `SMAppService` needs a signed bundle. `make app` says whether it signed or fell back to ad-hoc. |
 | Status stuck on after a crash | Known and accepted — OnAir gives its own status no server-side expiry (ADR-0009). Clear it in Slack. |
